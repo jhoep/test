@@ -434,7 +434,6 @@ class VistaPanelPrincipal(discord.ui.View):
                 local = p_usd * tasa
                 col += f"`{r:>6,}` → {info_p['simbolo']}{local:,.0f}\n"
             embed.add_field(name=f"🌍 {info_p['nombre']} ({moneda})", value=col, inline=True)
-        embed.set_footer(text=f"{fuente} • ✅ precio fijo vendedor  📐 calculado ($0.005/R$)")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(
@@ -597,39 +596,22 @@ async def cmd_send(interaction: discord.Interaction):
 
 @bot.event
 async def on_ready():
-    print(f"🤖 Conectado como {bot.user} ({bot.user.id})")
-
-    if not BOT_TOKEN:
-        print("❌ FATAL: BOT_TOKEN no configurado")
-        return
-    if GUILD_ID == 0:
-        print("❌ FATAL: GUILD_ID no configurado")
+    if not BOT_TOKEN or GUILD_ID == 0:
         return
 
-    # Registrar vistas persistentes
     bot.add_view(VistaPanelPrincipal())
     bot.add_view(VistaTicket())
 
-    # Sincronizar comandos slash
     try:
-        synced = await tree.sync(guild=discord.Object(id=GUILD_ID))
-        print(f"✅ {len(synced)} comandos slash sincronizados en guild {GUILD_ID}")
-    except discord.Forbidden:
-        print("❌ Sin permisos para sincronizar slash commands (falta scope applications.commands)")
-    except Exception as e:
-        print(f"❌ Error sincronizando: {type(e).__name__}: {e}")
+        await tree.sync(guild=discord.Object(id=GUILD_ID))
+    except Exception:
+        pass
 
-    # Test tasas live
     try:
-        rates = await obtener_tasas_live()
-        if rates:
-            print(f"✅ Tasas de cambio cargadas ({len(rates)} monedas)")
-        else:
-            print("⚠️  Tasas live no disponibles, usando tasas estáticas")
-    except Exception as e:
-        print(f"⚠️  Error cargando tasas: {e}")
+        await obtener_tasas_live()
+    except Exception:
+        pass
 
-    print("✅ Bot listo y operativo")
 
 
 @bot.event
@@ -644,19 +626,9 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 keep_alive()
 
 if not BOT_TOKEN:
-    print("❌ FATAL: La variable de entorno BOT_TOKEN no está configurada en Render.")
-    print("   Ve a Render → tu servicio → Environment → agrega BOT_TOKEN")
     exit(1)
 
 if GUILD_ID == 0:
-    print("❌ FATAL: La variable de entorno GUILD_ID no está configurada en Render.")
-    print("   Ve a Render → tu servicio → Environment → agrega GUILD_ID")
     exit(1)
 
-try:
-    print("🚀 Iniciando bot...")
-    bot.run(BOT_TOKEN, log_handler=None)
-except discord.LoginFailure:
-    print("❌ FATAL: Token inválido. Verifica BOT_TOKEN en las variables de entorno de Render.")
-except Exception as e:
-    print(f"❌ Error fatal al iniciar el bot: {type(e).__name__}: {e}")
+bot.run(BOT_TOKEN, log_handler=None)
