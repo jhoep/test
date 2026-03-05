@@ -434,7 +434,7 @@ class VistaPanelPrincipal(discord.ui.View):
                 local = p_usd * tasa
                 col += f"`{r:>6,}` → {info_p['simbolo']}{local:,.0f}\n"
             embed.add_field(name=f"🌍 {info_p['nombre']} ({moneda})", value=col, inline=True)
-        embed.set_footer(text=f"{fuente} • ✅ precio fijo vendedor  📐 calculado ($0.005/R$)")
+        embed.set_footer(text=f"{fuente} • ✅ precio fijo vendedor  ✅ calculado ($0.005/R$)")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(
