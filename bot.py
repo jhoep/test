@@ -16,9 +16,43 @@ STAFF_ROLE_ID       = int(os.environ["STAFF_ROLE_ID"])       if os.environ.get("
 LOG_CHANNEL_ID      = int(os.environ["LOG_CHANNEL_ID"])      if os.environ.get("LOG_CHANNEL_ID")      else None
 
 # ============================================================
-#  PRECIOS DE ROBUX  (USD por 100 robux)
+#  TABLA DE PRECIOS OFICIAL DE ROBUX (USD exactos)
 # ============================================================
-PRECIO_USD_POR_100_ROBUX = 1.25       # precio base en USD
+# Fuente: precios reales del vendedor
+PRECIOS_ROBUX = {
+    1_000:  5.00,
+    2_000: 10.00,
+    3_000: 15.00,
+    5_000: 25.00,
+    7_000: 35.00,
+   10_000: 50.00,
+   15_000: 75.00,
+   20_000:100.00,
+   25_000:125.00,
+   30_000:150.00,
+}
+# Cantidades disponibles ordenadas
+CANTIDADES_DISPONIBLES = sorted(PRECIOS_ROBUX.keys())
+
+def precio_usd(robux: int) -> float | None:
+    """Retorna el precio USD exacto para una cantidad de robux, o None si no está en la tabla."""
+    return PRECIOS_ROBUX.get(robux)
+
+def precio_usd_aproximado(robux: int) -> float:
+    """Interpola linealmente entre los puntos de la tabla para cantidades personalizadas."""
+    if robux in PRECIOS_ROBUX:
+        return PRECIOS_ROBUX[robux]
+    keys = CANTIDADES_DISPONIBLES
+    if robux <= keys[0]:
+        return (robux / keys[0]) * PRECIOS_ROBUX[keys[0]]
+    if robux >= keys[-1]:
+        return (robux / keys[-1]) * PRECIOS_ROBUX[keys[-1]]
+    for i in range(len(keys) - 1):
+        lo, hi = keys[i], keys[i+1]
+        if lo <= robux <= hi:
+            t = (robux - lo) / (hi - lo)
+            return PRECIOS_ROBUX[lo] + t * (PRECIOS_ROBUX[hi] - PRECIOS_ROBUX[lo])
+    return 0.0
 
 # Tipos de cambio aproximados (USD → moneda local)
 # Actualiza según necesites o intégralos con una API de tasas
@@ -66,12 +100,12 @@ ticket_counter: int = 0
 
 def calcular_precio(robux: int, codigo_pais: str) -> tuple[float, str]:
     """Retorna (precio_local, texto_formateado)."""
-    info   = TASAS_CAMBIO.get(codigo_pais.upper())
+    info = TASAS_CAMBIO.get(codigo_pais.upper())
     if not info:
         return None, None
-    usd    = (robux / 100) * PRECIO_USD_POR_100_ROBUX
-    local  = usd * info["tasa"]
-    texto  = f"{info['simbolo']}{local:,.2f} {info['moneda']}"
+    usd   = precio_usd_aproximado(robux)
+    local = usd * info["tasa"]
+    texto = f"{info['simbolo']}{local:,.2f} {info['moneda']}"
     return local, texto
 
 
@@ -96,7 +130,7 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
     )
     cantidad = discord.ui.TextInput(
         label="¿Cuántos Robux quieres?",
-        placeholder="100, 400, 800, 1700…",
+        placeholder="1000, 2000, 3000, 5000, 7000, 10000…",
         min_length=1,
         max_length=6,
         required=True,
@@ -142,7 +176,8 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
             return
 
         precio_local, precio_texto = calcular_precio(robux, codigo)
-        usd = (robux / 100) * PRECIO_USD_POR_100_ROBUX
+        usd = precio_usd_aproximado(robux)
+        es_precio_exacto = robux in PRECIOS_ROBUX
         info_pais = TASAS_CAMBIO[codigo]
 
         # ── Crear canal de ticket ──
@@ -203,13 +238,21 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
         embed.add_field(name="👤 Comprador",       value=interaction.user.mention,                inline=True)
         embed.add_field(name="🌍 País",            value=f"{info_pais['nombre']} ({info_pais['moneda']})", inline=True)
         embed.add_field(name="🎲 Robux solicitados", value=f"**{robux:,} R$**",                  inline=True)
-        embed.add_field(name="💵 Precio USD",      value=f"${usd:.2f} USD",                      inline=True)
+        precio_badge = "✅ Precio exacto" if es_precio_exacto else "⚠️ Precio estimado"
+        embed.add_field(name=f"💵 Precio USD ({precio_badge})", value=f"**${usd:.2f} USD**",     inline=True)
         embed.add_field(name="💰 Precio local",    value=f"**{precio_texto}**",                  inline=True)
         embed.add_field(name="💳 Método de pago",  value=self.metodo_pago.value.strip(),         inline=True)
         embed.add_field(name="🎮 Usuario Roblox",  value=self.usuario_roblox.value.strip(),      inline=False)
+        if not es_precio_exacto:
+            cantidades_str = " · ".join(f"{c:,}" for c in CANTIDADES_DISPONIBLES)
+            embed.add_field(
+                name="⚠️ Cantidad no estándar",
+                value=f"El precio es **estimado**. Cantidades con precio exacto:\n`{cantidades_str}`",
+                inline=False,
+            )
         if self.notas.value.strip():
             embed.add_field(name="📝 Notas",       value=self.notas.value.strip(),               inline=False)
-        embed.set_footer(text=f"Ticket #{ticket_counter:04d} • Tasa aprox. 1 USD = {info_pais['tasa']} {info_pais['moneda']}")
+        embed.set_footer(text=f"Ticket #{ticket_counter:04d} • Tasa: 1 USD = {info_pais['tasa']} {info_pais['moneda']}")
 
         vista_ticket = VistaTicket()
         await canal.send(
@@ -336,20 +379,23 @@ class VistaPanelPrincipal(discord.ui.View):
     async def ver_precios(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = discord.Embed(
             title="📊 Tabla de precios de Robux",
-            description=f"Precio base: **${PRECIO_USD_POR_100_ROBUX} USD** por cada 100 Robux\n\u200b",
+            description="Precios **oficiales** directos del vendedor:\n\u200b",
             color=0xF1C40F,
         )
-        tabla = ""
-        cantidades = [100, 400, 800, 1700, 4500, 10000]
-        for pais_code, info in list(TASAS_CAMBIO.items())[:10]:   # muestra solo 10
-            fila = f"**{info['nombre']}** ({info['moneda']})\n"
-            fila += " | ".join(
-                f"{r}R$={info['simbolo']}{(r/100*PRECIO_USD_POR_100_ROBUX*info['tasa']):.0f}"
-                for r in [100, 800, 1700]
-            )
-            tabla += fila + "\n"
-        embed.add_field(name="Ejemplos rápidos (100 / 800 / 1700 R$)", value=tabla, inline=False)
-        embed.set_footer(text="Tasas aproximadas. Usa /precio para un cálculo exacto.")
+        # Tabla oficial USD
+        tabla_usd = ""
+        for r, p in PRECIOS_ROBUX.items():
+            tabla_usd += f"`{r:>6,} R$` → **${p:.2f} USD**\n"
+        embed.add_field(name="💵 Precios en USD", value=tabla_usd, inline=True)
+        # Tabla en monedas populares
+        for pais_code in ["MX", "AR", "CO", "CL", "ES"]:
+            info = TASAS_CAMBIO[pais_code]
+            col = ""
+            for r, p in PRECIOS_ROBUX.items():
+                local = p * info["tasa"]
+                col += f"`{r:>6,}` → {info['simbolo']}{local:,.0f}\n"
+            embed.add_field(name=f"🌍 {info['nombre']} ({info['moneda']})", value=col, inline=True)
+        embed.set_footer(text="Precios exactos para cantidades estándar. Usa /precio para otras cantidades.")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(
@@ -412,16 +458,25 @@ async def cmd_precio(interaction: discord.Interaction, robux: int, pais: str):
         return
 
     info = TASAS_CAMBIO[codigo]
-    usd  = (robux / 100) * PRECIO_USD_POR_100_ROBUX
+    usd  = precio_usd_aproximado(robux)
+    es_exacto = robux in PRECIOS_ROBUX
     _, precio_texto = calcular_precio(robux, codigo)
 
+    precio_badge = "✅ Precio exacto" if es_exacto else "⚠️ Precio estimado"
     embed = discord.Embed(title="💰 Calculadora de Robux", color=0xF39C12)
-    embed.add_field(name="Robux",       value=f"{robux:,} R$",   inline=True)
-    embed.add_field(name="País",        value=info["nombre"],     inline=True)
-    embed.add_field(name="Precio USD",  value=f"${usd:.2f}",      inline=True)
-    embed.add_field(name="Precio local",value=f"**{precio_texto}**", inline=True)
-    embed.add_field(name="Tasa usada",  value=f"1 USD = {info['tasa']} {info['moneda']}", inline=True)
-    embed.set_footer(text="Tasas aproximadas. El precio final lo confirma el staff.")
+    embed.add_field(name="🎲 Robux",          value=f"**{robux:,} R$**",              inline=True)
+    embed.add_field(name="🌍 País",           value=info["nombre"],                   inline=True)
+    embed.add_field(name=f"💵 USD ({precio_badge})", value=f"**${usd:.2f}**",         inline=True)
+    embed.add_field(name="💰 Precio local",   value=f"**{precio_texto}**",            inline=True)
+    embed.add_field(name="📈 Tasa usada",     value=f"1 USD = {info['tasa']} {info['moneda']}", inline=True)
+    if not es_exacto:
+        cantidades_str = " · ".join(f"{c:,}" for c in CANTIDADES_DISPONIBLES)
+        embed.add_field(
+            name="⚠️ Cantidad no estándar",
+            value=f"Precio **interpolado**. Cantidades exactas:\n`{cantidades_str}`",
+            inline=False,
+        )
+    embed.set_footer(text="Precios oficiales de la tabla del vendedor.")
     await interaction.response.send_message(embed=embed)
 
 
