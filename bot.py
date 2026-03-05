@@ -434,7 +434,7 @@ class VistaPanelPrincipal(discord.ui.View):
                 local = p_usd * tasa
                 col += f"`{r:>6,}` → {info_p['simbolo']}{local:,.0f}\n"
             embed.add_field(name=f"🌍 {info_p['nombre']} ({moneda})", value=col, inline=True)
-        embed.set_footer(text=f"{fuente} • ✅ precio fijo vendedor  ✅ calculado ($0.005/R$)")
+        embed.set_footer(text=f"{fuente} • ✅ precio fijo vendedor  📐 calculado ($0.005/R$)")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(
@@ -543,6 +543,51 @@ async def cmd_cerrar(interaction: discord.Interaction):
     await asyncio.sleep(5)
     await interaction.channel.delete(reason=f"Cerrado por {interaction.user}")
 
+
+
+
+@tree.command(name="send", description="📊 Envía la tabla de precios de Robux al canal (solo staff)", guild=discord.Object(id=GUILD_ID))
+@app_commands.checks.has_permissions(manage_messages=True)
+async def cmd_send(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+
+    rates = await obtener_tasas_live()
+    fuente = "🌐 Tasas en tiempo real" if rates else "📌 Tasas estáticas (fallback)"
+
+    cantidades_mostrar = list(PRECIOS_ROBUX.keys()) + [40_000, 50_000]
+
+    # ── Embed principal ──
+    embed = discord.Embed(
+        title="📊 Tabla de precios de Robux",
+        description="Precios **oficiales** directos del vendedor:\n\u200b",
+        color=0x00BFFF,
+    )
+
+    # Columna USD
+    col_usd = ""
+    for r in cantidades_mostrar:
+        p = precio_usd_aproximado(r)
+        icon = "✅" if r in PRECIOS_ROBUX else "📐"
+        col_usd += f"{icon} `{r:>6,} R$` -> **${p:.2f}**\n"
+    embed.add_field(name="💵 Precios en USD", value=col_usd, inline=True)
+
+    # Columnas por país
+    paises_tabla = ["MX", "AR", "CO", "CL", "ES"]
+    for pais_code in paises_tabla:
+        info_p = TASAS_CAMBIO[pais_code]
+        moneda  = info_p["moneda"]
+        tasa    = rates.get(moneda, info_p["tasa"]) if rates else info_p["tasa"]
+        col = ""
+        for r in cantidades_mostrar:
+            p_usd = precio_usd_aproximado(r)
+            local = p_usd * tasa
+            col += f"`{r:>6,}` -> {info_p['simbolo']}{local:,.0f}\n"
+        embed.add_field(name=f"🌍 {info_p['nombre']} ({moneda})", value=col, inline=True)
+
+    embed.set_footer(text=f"{fuente} • ✅ precio fijo vendedor  📐 calculado ($0.005/R$)")
+
+    await interaction.channel.send(embed=embed)
+    await interaction.followup.send("✅ Tabla enviada.", ephemeral=True)
 
 # ──────────────────────────────────────────────
 #  EVENTOS
