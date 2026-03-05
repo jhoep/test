@@ -19,11 +19,11 @@ STAFF_ROLE_ID       = int(os.environ["STAFF_ROLE_ID"])       if os.environ.get("
 LOG_CHANNEL_ID      = int(os.environ["LOG_CHANNEL_ID"])      if os.environ.get("LOG_CHANNEL_ID")      else None
 
 # ============================================================
-#  TABLA DE PRECIOS OFICIAL DE ROBUX
-#  Fuente: precios reales del vendedor + tasa oficial Roblox
-#  Tasa base: $0.0125 USD por Robux (oficial Roblox web/PC)
+#  TABLA DE PRECIOS DEL VENDEDOR
+#  Tasa constante: $0.005 USD por Robux  (1,000 R$ = $5.00)
+#  La misma tasa aplica para CUALQUIER cantidad — hasta 50k+
 # ============================================================
-TASA_USD_POR_ROBUX = 0.0125   # $1.25 por cada 100 Robux (tasa oficial Roblox)
+TASA_USD_POR_ROBUX = 0.005   # $5.00 por cada 1,000 Robux
 
 PRECIOS_ROBUX = {
     1_000:  5.00,
@@ -41,12 +41,14 @@ CANTIDADES_DISPONIBLES = sorted(PRECIOS_ROBUX.keys())
 
 def precio_usd_aproximado(robux: int) -> float:
     """
-    Para cantidades en la tabla → precio exacto del vendedor.
-    Para cualquier otra cantidad → tasa oficial Roblox ($0.0125/R$).
-    Funciona hasta 50,000+ robux sin límite.
+    Precio USD para cualquier cantidad de Robux.
+    - Cantidades de la tabla → precio exacto del vendedor.
+    - Cualquier otra cantidad (ej: 17,000 / 50,000) → tasa $0.005/R$.
+    Sin límite superior.
     """
     if robux in PRECIOS_ROBUX:
         return PRECIOS_ROBUX[robux]
+    # Tasa constante: misma relación que toda la tabla
     return round(robux * TASA_USD_POR_ROBUX, 2)
 
 # ──────────────────────────────────────────────────────────
@@ -435,7 +437,7 @@ class VistaPanelPrincipal(discord.ui.View):
                 local = p_usd * tasa
                 col += f"`{r:>6,}` → {info_p['simbolo']}{local:,.0f}\n"
             embed.add_field(name=f"🌍 {info_p['nombre']} ({moneda})", value=col, inline=True)
-        embed.set_footer(text=f"{fuente} • ✅ precio fijo vendedor  📐 calculado ($0.0125/R$)")
+        embed.set_footer(text=f"{fuente} • ✅ precio fijo vendedor  📐 calculado ($0.005/R$)")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(
@@ -516,10 +518,10 @@ async def cmd_precio(interaction: discord.Interaction, robux: int, pais: str):
         cantidades_str = " · ".join(f"{c:,}" for c in CANTIDADES_DISPONIBLES)
         embed.add_field(
             name="📐 Cantidad personalizada",
-            value=f"Calculado con tasa oficial Roblox: **$0.0125/R$**\nCantidades con precio fijo del vendedor:\n`{cantidades_str}`\npara 50,000+ se calcula automáticamente.",
+            value=f"Calculado a **$0.005 USD/R$** (misma tasa del vendedor)\nCantidades con precio fijo:\n`{cantidades_str}`\nEj: 17,000 R$ = $85 · 50,000 R$ = $250 USD",
             inline=False,
         )
-    embed.set_footer(text="💡 Tasa oficial Roblox: $0.0125 USD/R$ • Tasas FX actualizadas cada hora")
+    embed.set_footer(text="💡 Tasa: $0.005 USD/R$ ($5 por cada 1,000 R$) • FX actualizado cada hora")
     await interaction.response.send_message(embed=embed)
 
 
