@@ -546,7 +546,7 @@ async def cmd_cerrar(interaction: discord.Interaction):
 
 
 @tree.command(name="send", description="📊 Envía la tabla de precios de Robux al canal (solo staff)", guild=discord.Object(id=GUILD_ID))
-@app_commands.checks.has_permissions(manage_messages=True)
+@app_commands.checks.has_permissions(administrator=True)
 async def cmd_send(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
 
@@ -616,10 +616,14 @@ async def on_ready():
 
 @bot.event
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    if isinstance(error, app_commands.MissingPermissions):
-        await interaction.response.send_message("❌ No tienes permisos para usar este comando.", ephemeral=True)
-    else:
-        await interaction.response.send_message(f"❌ Error: {error}", ephemeral=True)
+    msg = "❌ No tienes permisos para usar este comando." if isinstance(error, app_commands.MissingPermissions) else f"❌ Error: {error}"
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(msg, ephemeral=True)
+        else:
+            await interaction.response.send_message(msg, ephemeral=True)
+    except Exception:
+        pass
 
 
 # ──────────────────────────────────────────────
