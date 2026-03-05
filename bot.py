@@ -554,7 +554,12 @@ async def cmd_send(interaction: discord.Interaction):
     rates = await obtener_tasas_live()
     fuente = "🌐 Tasas en tiempo real" if rates else "📌 Tasas estáticas (fallback)"
 
+    # Solo cantidades de la tabla + 40k y 50k — todos con ✅
     cantidades_mostrar = list(PRECIOS_ROBUX.keys()) + [40_000, 50_000]
+    # Agregar 40k y 50k al dict para que el icon sea ✅
+    precios_ext = dict(PRECIOS_ROBUX)
+    precios_ext[40_000] = precio_usd_aproximado(40_000)
+    precios_ext[50_000] = precio_usd_aproximado(50_000)
 
     # ── Embed principal ──
     embed = discord.Embed(
@@ -563,15 +568,14 @@ async def cmd_send(interaction: discord.Interaction):
         color=0x00BFFF,
     )
 
-    # Columna USD
+    # Columna USD — todos con ✅
     col_usd = ""
     for r in cantidades_mostrar:
         p = precio_usd_aproximado(r)
-        icon = "✅" if r in PRECIOS_ROBUX else "📐"
-        col_usd += f"{icon} `{r:>6,} R$` -> **${p:.2f}**\n"
+        col_usd += f"✅ `{r:>6,} R$` -> **${p:.2f}**\n"
     embed.add_field(name="💵 Precios en USD", value=col_usd, inline=True)
 
-    # Columnas por país
+    # Columnas por país — todos con ✅
     paises_tabla = ["MX", "AR", "CO", "CL", "ES"]
     for pais_code in paises_tabla:
         info_p = TASAS_CAMBIO[pais_code]
@@ -583,8 +587,6 @@ async def cmd_send(interaction: discord.Interaction):
             local = p_usd * tasa
             col += f"`{r:>6,}` -> {info_p['simbolo']}{local:,.0f}\n"
         embed.add_field(name=f"🌍 {info_p['nombre']} ({moneda})", value=col, inline=True)
-
-    embed.set_footer(text=f"{fuente} • ✅ precio fijo vendedor  📐 calculado ($0.005/R$)")
 
     await interaction.channel.send(embed=embed)
     await interaction.followup.send("✅ Tabla enviada.", ephemeral=True)
