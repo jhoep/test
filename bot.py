@@ -1,16 +1,19 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+from typing import Optional, Tuple
 import asyncio
 import datetime
 import os
+import aiohttp
+import time as _time
 from keep_alive import keep_alive
 
 # ============================================================
 #  CONFIGURACIÓN — variables de entorno (Render.com)
 # ============================================================
 BOT_TOKEN           = os.environ.get("BOT_TOKEN", "")
-GUILD_ID            = int(os.environ.get("GUILD_ID", "0"))
+GUILD_ID            = int(os.environ.get("GUILD_ID", "0"))  # ⚠️ Configura GUILD_ID en Render
 CATEGORY_TICKETS_ID = int(os.environ["CATEGORY_TICKETS_ID"]) if os.environ.get("CATEGORY_TICKETS_ID") else None
 STAFF_ROLE_ID       = int(os.environ["STAFF_ROLE_ID"])       if os.environ.get("STAFF_ROLE_ID")       else None
 LOG_CHANNEL_ID      = int(os.environ["LOG_CHANNEL_ID"])      if os.environ.get("LOG_CHANNEL_ID")      else None
@@ -49,13 +52,12 @@ def precio_usd_aproximado(robux: int) -> float:
 # ──────────────────────────────────────────────────────────
 #  TASAS DE CAMBIO EN TIEMPO REAL  (caché de 1 hora)
 # ──────────────────────────────────────────────────────────
-import aiohttp, time as _time
 
 _tasas_cache: dict = {}
 _tasas_ts: float   = 0.0
 _CACHE_TTL: int    = 3600  # segundos
 
-async def obtener_tasas_live() -> dict:
+async def obtener_tasas_live():
     """Obtiene tasas USD→monedas desde exchangerate-api.com (gratis, sin key)."""
     global _tasas_cache, _tasas_ts
     if _tasas_cache and (_time.time() - _tasas_ts) < _CACHE_TTL:
@@ -116,7 +118,7 @@ ticket_counter: int = 0
 #  UTILIDADES
 # ──────────────────────────────────────────────
 
-async def calcular_precio(robux: int, codigo_pais: str) -> tuple[float, str, float]:
+async def calcular_precio(robux: int, codigo_pais: str) -> Tuple:
     """Retorna (precio_local, texto_formateado, usd).
     Usa tasas de cambio en tiempo real; cae en estáticas si falla la API."""
     info = TASAS_CAMBIO.get(codigo_pais.upper())
@@ -558,14 +560,39 @@ async def cmd_cerrar(interaction: discord.Interaction):
 
 @bot.event
 async def on_ready():
+    print(f"🤖 Conectado como {bot.user} ({bot.user.id})")
+
+    if not BOT_TOKEN:
+        print("❌ FATAL: BOT_TOKEN no configurado")
+        return
+    if GUILD_ID == 0:
+        print("❌ FATAL: GUILD_ID no configurado")
+        return
+
+    # Registrar vistas persistentes
     bot.add_view(VistaPanelPrincipal())
     bot.add_view(VistaTicket())
+
+    # Sincronizar comandos slash
     try:
         synced = await tree.sync(guild=discord.Object(id=GUILD_ID))
-        print(f"✅ {len(synced)} comandos sincronizados en el servidor {GUILD_ID}")
+        print(f"✅ {len(synced)} comandos slash sincronizados en guild {GUILD_ID}")
+    except discord.Forbidden:
+        print("❌ Sin permisos para sincronizar slash commands (falta scope applications.commands)")
     except Exception as e:
-        print(f"❌ Error sincronizando comandos: {e}")
-    print(f"🤖 Bot listo: {bot.user} ({bot.user.id})")
+        print(f"❌ Error sincronizando: {type(e).__name__}: {e}")
+
+    # Test tasas live
+    try:
+        rates = await obtener_tasas_live()
+        if rates:
+            print(f"✅ Tasas de cambio cargadas ({len(rates)} monedas)")
+        else:
+            print("⚠️  Tasas live no disponibles, usando tasas estáticas")
+    except Exception as e:
+        print(f"⚠️  Error cargando tasas: {e}")
+
+    print("✅ Bot listo y operativo")
 
 
 @bot.event
@@ -578,4 +605,21 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 
 # ──────────────────────────────────────────────
 keep_alive()
-bot.run(BOT_TOKEN)
+
+if not BOT_TOKEN:
+    print("❌ FATAL: La variable de entorno BOT_TOKEN no está configurada en Render.")
+    print("   Ve a Render → tu servicio → Environment → agrega BOT_TOKEN")
+    exit(1)
+
+if GUILD_ID == 0:
+    print("❌ FATAL: La variable de entorno GUILD_ID no está configurada en Render.")
+    print("   Ve a Render → tu servicio → Environment → agrega GUILD_ID")
+    exit(1)
+
+try:
+    print("🚀 Iniciando bot...")
+    bot.run(BOT_TOKEN, log_handler=None)
+except discord.LoginFailure:
+    print("❌ FATAL: Token inválido. Verifica BOT_TOKEN en las variables de entorno de Render.")
+except Exception as e:
+    print(f"❌ Error fatal al iniciar el bot: {type(e).__name__}: {e}")
