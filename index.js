@@ -8,7 +8,9 @@ const {
     ModalBuilder,
     TextInputBuilder,
     TextInputStyle,
-    SlashCommandBuilder
+    SlashCommandBuilder,
+    REST,
+    Routes
 } = require('discord.js');
 const dotenv = require('dotenv');
 const axios = require('axios');
@@ -16,36 +18,15 @@ const express = require('express');
 
 dotenv.config();
 
-// ==================== CONFIGURACIÓN ====================
-const TOKEN = process.env.DISCORD_TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
+// ==================== VERIFICAR VARIABLES DE ENTORNO ====================
+console.log('🔍 Verificando configuración...');
+console.log(`DISCORD_TOKEN: ${process.env.DISCORD_TOKEN ? '✓ Configurado' : '✗ FALTA'}`);
+console.log(`CLIENT_ID: ${process.env.CLIENT_ID ? '✓ Configurado' : '✗ FALTA'}`);
 
-// Tasas de cambio aproximadas (fallback)
-const fallbackRates = {
-    'MX': 17.50, // Peso Mexicano
-    'AR': 820.00, // Peso Argentino
-    'CL': 950.00, // Peso Chileno
-    'CO': 4000.00, // Peso Colombiano
-    'PE': 3.80, // Sol Peruano
-    'US': 1.00, // Dólar
-    'ES': 0.92, // Euro
-    'BR': 5.05, // Real Brasileño
-    'VE': 36.00, // Bolívar
-    'UY': 39.00, // Peso Uruguayo
-    'CR': 530.00, // Colón Costarricense
-    'DO': 58.00, // Peso Dominicano
-    'PA': 1.00, // Balboa (igual que USD)
-    'PY': 7300.00, // Guaraní
-    'BO': 6.90 // Boliviano
-};
-
-// Mapa de códigos de país a moneda
-const currencyMap = {
-    'MX': 'MXN', 'AR': 'ARS', 'CL': 'CLP', 'CO': 'COP', 'PE': 'PEN',
-    'US': 'USD', 'ES': 'EUR', 'BR': 'BRL', 'VE': 'VES', 'UY': 'UYU',
-    'CR': 'CRC', 'DO': 'DOP', 'PA': 'PAB', 'PY': 'PYG', 'BO': 'BOB'
-};
+if (!process.env.DISCORD_TOKEN || !process.env.CLIENT_ID) {
+    console.error('❌ ERROR: Faltan variables de entorno. Revisa tu archivo .env');
+    process.exit(1);
+}
 
 // ==================== SERVIDOR WEB (para Render) ====================
 const app = express();
@@ -59,6 +40,7 @@ app.get('/', (req, res) => {
                 <h1>🤖 Bot de Discord está funcionando!</h1>
                 <p>El bot de tickets está activo 24/7</p>
                 <p>🟢 Estado: ONLINE</p>
+                <p>${new Date().toLocaleString()}</p>
             </body>
         </html>
     `);
@@ -78,28 +60,67 @@ const client = new Client({
     ]
 });
 
-// ==================== COMANDOS SLASH ====================
-const commands = [
-    new SlashCommandBuilder()
-        .setName('panel')
-        .setDescription('Muestra el panel de tickets para comprar Robux')
-];
+// Tasas de cambio
+const fallbackRates = {
+    'MX': 17.50, 'AR': 820.00, 'CL': 950.00, 'CO': 4000.00, 'PE': 3.80,
+    'US': 1.00, 'ES': 0.92, 'BR': 5.05, 'VE': 36.00, 'UY': 39.00,
+    'CR': 530.00, 'DO': 58.00, 'PA': 1.00, 'PY': 7300.00, 'BO': 6.90
+};
+
+const currencyMap = {
+    'MX': 'MXN', 'AR': 'ARS', 'CL': 'CLP', 'CO': 'COP', 'PE': 'PEN',
+    'US': 'USD', 'ES': 'EUR', 'BR': 'BRL', 'VE': 'VES', 'UY': 'UYU',
+    'CR': 'CRC', 'DO': 'DOP', 'PA': 'PAB', 'PY': 'PYG', 'BO': 'BOB'
+};
+
+// ==================== REGISTRAR COMANDOS ====================
+async function registerCommands() {
+    const commands = [
+        new SlashCommandBuilder()
+            .setName('panel')
+            .setDescription('Muestra el panel de tickets para comprar Robux')
+    ];
+
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+
+    try {
+        console.log('🔄 Registrando comandos slash...');
+        await rest.put(
+            Routes.applicationCommands(process.env.CLIENT_ID),
+            { body: commands.map(cmd => cmd.toJSON()) }
+        );
+        console.log('✅ Comandos slash registrados globalmente');
+    } catch (error) {
+        console.error('❌ Error registrando comandos:', error);
+    }
+}
+
+// ==================== EVENTO READY ====================
+client.once('ready', async () => {
+    console.log('✅ BOT CONECTADO EXITOSAMENTE!');
+    console.log(`📊 Información del Bot:`);
+    console.log(`   • Usuario: ${client.user.tag}`);
+    console.log(`   • ID: ${client.user.id}`);
+    console.log(`   • Servidores: ${client.guilds.cache.size}`);
+    
+    await registerCommands();
+    
+    client.user.setActivity('/panel | Tickets 24/7', { type: 3 });
+    console.log('🎫 Bot listo para usar!');
+});
 
 // ==================== FUNCIONES ====================
-
-// Obtener tasa de cambio
 async function getExchangeRate(countryCode) {
     try {
         const currency = currencyMap[countryCode] || 'USD';
         const response = await axios.get(`https://api.exchangerate-api.com/v4/latest/USD`);
         return response.data.rates[currency] || fallbackRates[countryCode] || 1;
     } catch (error) {
-        console.log('Usando tasa de cambio local:', error.message);
+        console.log('Usando tasa de cambio local');
         return fallbackRates[countryCode] || 1;
     }
 }
 
-// Obtener o crear categoría de tickets
 async function getOrCreateCategory(guild) {
     let category = guild.channels.cache.find(c => c.name === '📋 TICKETS' && c.type === 4);
     
@@ -107,7 +128,7 @@ async function getOrCreateCategory(guild) {
         try {
             category = await guild.channels.create({
                 name: '📋 TICKETS',
-                type: 4 // GUILD_CATEGORY
+                type: 4
             });
         } catch (error) {
             console.error('Error creando categoría:', error);
@@ -117,205 +138,163 @@ async function getOrCreateCategory(guild) {
     return category;
 }
 
-// ==================== MANEJADOR DE COMANDOS ====================
-client.once('ready', async () => {
-    console.log(`✅ Bot conectado como ${client.user.tag}`);
-    
-    try {
-        await client.application.commands.set(commands);
-        console.log('✅ Comandos slash registrados globalmente');
-    } catch (error) {
-        console.error('Error registrando comandos:', error);
-    }
-    
-    client.user.setActivity('/panel | Tickets 24/7', { type: 3 });
-    console.log('🎫 Bot listo para usar!');
-});
-
 // ==================== INTERACCIONES ====================
 client.on('interactionCreate', async interaction => {
-    
-    // ===== COMANDO /PANEL =====
-    if (interaction.isChatInputCommand() && interaction.commandName === 'panel') {
-        const embed = new EmbedBuilder()
-            .setColor(0x0099FF)
-            .setTitle('🎫 Sistema de Compra de Robux')
-            .setDescription('Bienvenido al sistema de compra de Robux!\n\nHaz clic en el botón de abajo para crear un ticket y comprar Robux con precio en tu moneda local.')
-            .addFields(
-                { name: '📋 Instrucciones', value: '1️⃣ Haz clic en "Crear Ticket"\n2️⃣ Completa el formulario con tu país y cantidad\n3️⃣ Recibe el precio automático en tu moneda local\n4️⃣ Un moderador te atenderá' },
-                { name: '💰 Países soportados', value: '🇲🇽 MX - México\n🇦🇷 AR - Argentina\n🇨🇱 CL - Chile\n🇨🇴 CO - Colombia\n🇵🇪 PE - Perú\n🇺🇸 US - Estados Unidos\n🇪🇸 ES - España\n🇧🇷 BR - Brasil\n🇻🇪 VE - Venezuela\n🇺🇾 UY - Uruguay' },
-                { name: '💵 Precio aproximado', value: '100 Robux ≈ $1.25 USD' }
-            )
-            .setFooter({ text: 'Sistema Automático de Tickets' })
-            .setTimestamp();
+    try {
+        // Comando /panel
+        if (interaction.isChatInputCommand() && interaction.commandName === 'panel') {
+            const embed = new EmbedBuilder()
+                .setColor(0x0099FF)
+                .setTitle('🎫 Sistema de Compra de Robux')
+                .setDescription('Bienvenido al sistema de compra de Robux!')
+                .addFields(
+                    { name: '📋 Instrucciones', value: '1️⃣ Haz clic en "Crear Ticket"\n2️⃣ Completa el formulario\n3️⃣ Recibe el precio en tu moneda' },
+                    { name: '💰 Países soportados', value: '🇲🇽 MX, 🇦🇷 AR, 🇨🇱 CL, 🇨🇴 CO, 🇵🇪 PE, 🇺🇸 US, 🇪🇸 ES, 🇧🇷 BR' }
+                )
+                .setTimestamp();
 
-        const button = new ButtonBuilder()
-            .setCustomId('crear_ticket')
-            .setLabel('🎫 Crear Ticket')
-            .setStyle(ButtonStyle.Success)
-            .setEmoji('🎟️');
+            const button = new ButtonBuilder()
+                .setCustomId('crear_ticket')
+                .setLabel('🎫 Crear Ticket')
+                .setStyle(ButtonStyle.Success);
 
-        const row = new ActionRowBuilder().addComponents(button);
+            const row = new ActionRowBuilder().addComponents(button);
 
-        await interaction.reply({ embeds: [embed], components: [row] });
-    }
-    
-    // ===== BOTÓN CREAR TICKET =====
-    if (interaction.isButton() && interaction.customId === 'crear_ticket') {
-        
-        const modal = new ModalBuilder()
-            .setCustomId('formulario_ticket')
-            .setTitle('Formulario de Compra de Robux');
-
-        const paisInput = new TextInputBuilder()
-            .setCustomId('pais')
-            .setLabel('¿De qué país eres? (Ej: MX, AR, CL, CO, US)')
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder('Ingresa el código de 2 letras de tu país')
-            .setRequired(true)
-            .setMaxLength(2)
-            .setMinLength(2);
-
-        const robuxInput = new TextInputBuilder()
-            .setCustomId('robux')
-            .setLabel('¿Cuántos Robux quieres comprar?')
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder('Ejemplo: 1000, 2000, 5000')
-            .setRequired(true);
-
-        const firstRow = new ActionRowBuilder().addComponents(paisInput);
-        const secondRow = new ActionRowBuilder().addComponents(robuxInput);
-
-        modal.addComponents(firstRow, secondRow);
-
-        await interaction.showModal(modal);
-    }
-    
-    // ===== BOTÓN CERRAR TICKET =====
-    if (interaction.isButton() && interaction.customId === 'cerrar_ticket') {
-        await interaction.reply({ content: '🔒 Cerrando ticket en **5 segundos**...' });
-        
-        setTimeout(async () => {
-            try {
-                await interaction.channel.delete();
-            } catch (error) {
-                console.error('Error cerrando ticket:', error);
-            }
-        }, 5000);
-    }
-    
-    // ===== FORMULARIO ENVIADO =====
-    if (interaction.isModalSubmit() && interaction.customId === 'formulario_ticket') {
-        await interaction.deferReply({ ephemeral: true });
-
-        const pais = interaction.fields.getTextInputValue('pais').toUpperCase().trim();
-        const robuxStr = interaction.fields.getTextInputValue('robux');
-        const robux = parseInt(robuxStr);
-
-        // Validaciones
-        if (isNaN(robux) || robux <= 0) {
-            return await interaction.editReply({ 
-                content: '❌ Error: Por favor, ingresa una cantidad válida de Robux (número positivo).' 
-            });
+            await interaction.reply({ embeds: [embed], components: [row] });
         }
 
-        if (robux > 100000) {
-            return await interaction.editReply({ 
-                content: '❌ Error: La cantidad máxima permitida es 100,000 Robux.' 
-            });
+        // Botón crear ticket
+        if (interaction.isButton() && interaction.customId === 'crear_ticket') {
+            const modal = new ModalBuilder()
+                .setCustomId('formulario_ticket')
+                .setTitle('Formulario de Compra');
+
+            const paisInput = new TextInputBuilder()
+                .setCustomId('pais')
+                .setLabel('¿De qué país eres? (Ej: MX, AR, CL, CO)')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('Código de 2 letras')
+                .setRequired(true)
+                .setMaxLength(2);
+
+            const robuxInput = new TextInputBuilder()
+                .setCustomId('robux')
+                .setLabel('¿Cuántos Robux quieres?')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('Ej: 1000')
+                .setRequired(true);
+
+            const firstRow = new ActionRowBuilder().addComponents(paisInput);
+            const secondRow = new ActionRowBuilder().addComponents(robuxInput);
+
+            modal.addComponents(firstRow, secondRow);
+            await interaction.showModal(modal);
         }
 
-        if (!currencyMap[pais]) {
-            return await interaction.editReply({ 
-                content: `❌ Error: País no soportado. Usa uno de estos: ${Object.keys(currencyMap).join(', ')}` 
-            });
-        }
-
-        // Obtener tasa de cambio
-        const rate = await getExchangeRate(pais);
-        const precioUSD = (robux * 0.0125).toFixed(2); // 100 Robux = $1.25 USD
-        const precioLocal = (precioUSD * rate).toFixed(2);
-
-        // Crear canal de ticket
-        try {
-            const category = await getOrCreateCategory(interaction.guild);
+        // Botón cerrar ticket
+        if (interaction.isButton() && interaction.customId === 'cerrar_ticket') {
+            await interaction.reply({ content: '🔒 Cerrando ticket en 5 segundos...' });
             
+            setTimeout(async () => {
+                try {
+                    await interaction.channel.delete();
+                } catch (error) {
+                    console.error('Error cerrando ticket:', error);
+                }
+            }, 5000);
+        }
+
+        // Formulario enviado
+        if (interaction.isModalSubmit() && interaction.customId === 'formulario_ticket') {
+            await interaction.deferReply({ ephemeral: true });
+
+            const pais = interaction.fields.getTextInputValue('pais').toUpperCase();
+            const robux = parseInt(interaction.fields.getTextInputValue('robux'));
+
+            // Validaciones
+            if (isNaN(robux) || robux <= 0) {
+                return await interaction.editReply({ content: '❌ Cantidad inválida' });
+            }
+
+            if (!currencyMap[pais]) {
+                return await interaction.editReply({ 
+                    content: `❌ País no soportado. Usa: ${Object.keys(currencyMap).join(', ')}` 
+                });
+            }
+
+            // Calcular precio
+            const rate = await getExchangeRate(pais);
+            const precioUSD = (robux * 0.0125).toFixed(2);
+            const precioLocal = (precioUSD * rate).toFixed(2);
+
+            // Crear canal
+            const category = await getOrCreateCategory(interaction.guild);
             const ticketChannel = await interaction.guild.channels.create({
-                name: `ticket-${interaction.user.username.toLowerCase()}`,
-                type: 0, // GUILD_TEXT
+                name: `ticket-${interaction.user.username}`,
+                type: 0,
                 parent: category,
                 permissionOverwrites: [
-                    {
-                        id: interaction.guild.id,
-                        deny: ['ViewChannel']
-                    },
-                    {
-                        id: interaction.user.id,
-                        allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
-                    },
-                    {
-                        id: client.user.id,
-                        allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
-                    }
+                    { id: interaction.guild.id, deny: ['ViewChannel'] },
+                    { id: interaction.user.id, allow: ['ViewChannel', 'SendMessages'] },
+                    { id: client.user.id, allow: ['ViewChannel', 'SendMessages'] }
                 ]
             });
 
-            // Embed de información del ticket
             const embed = new EmbedBuilder()
                 .setColor(0x00FF00)
-                .setTitle('✅ Ticket Creado Correctamente')
-                .setDescription(`Ticket creado por ${interaction.user}`)
+                .setTitle('✅ Ticket Creado')
                 .addFields(
-                    { name: '📋 País', value: `🇺🇳 ${pais}`, inline: true },
-                    { name: '💰 Robux solicitados', value: `${robux.toLocaleString()} Robux`, inline: true },
-                    { name: '💵 Precio en USD', value: `$${precioUSD} USD`, inline: true },
-                    { name: '💱 Precio local', value: `${precioLocal} (moneda local)`, inline: true },
-                    { name: '📊 Tasa de cambio', value: `1 USD = ${rate} ${currencyMap[pais]}`, inline: true },
-                    { name: '👤 Usuario', value: `${interaction.user.tag}`, inline: true }
-                )
-                .setColor(0x0099FF)
-                .setTimestamp()
-                .setFooter({ text: 'Sistema de Tickets • Usa el botón para cerrar' });
+                    { name: '📋 País', value: pais, inline: true },
+                    { name: '💰 Robux', value: robux.toString(), inline: true },
+                    { name: '💵 Precio local', value: `${precioLocal}`, inline: true }
+                );
 
-            // Botón de cerrar
             const closeButton = new ButtonBuilder()
                 .setCustomId('cerrar_ticket')
-                .setLabel('🔒 Cerrar Ticket')
-                .setStyle(ButtonStyle.Danger)
-                .setEmoji('🔒');
+                .setLabel('🔒 Cerrar')
+                .setStyle(ButtonStyle.Danger);
 
             const row = new ActionRowBuilder().addComponents(closeButton);
 
-            // Mensaje de bienvenida
             await ticketChannel.send({ 
-                content: `${interaction.user} ¡Bienvenido a tu ticket! Un moderador te atenderá en breve.`,
+                content: `${interaction.user} ¡Bienvenido!`,
                 embeds: [embed],
                 components: [row]
             });
 
-            // Mensaje de confirmación
             await interaction.editReply({ 
-                content: `✅ **Ticket creado exitosamente!**\n🔗 Ve a tu ticket: ${ticketChannel}` 
+                content: `✅ Ticket creado: ${ticketChannel}` 
             });
-
-            // Log para el servidor
-            console.log(`📝 Ticket creado por ${interaction.user.tag} - ${robux} Robux (${pais})`);
-
-        } catch (error) {
-            console.error('Error creando ticket:', error);
-            await interaction.editReply({ 
-                content: '❌ Error al crear el ticket. Contacta a un administrador.' 
+        }
+    } catch (error) {
+        console.error('Error en interacción:', error);
+        if (!interaction.replied) {
+            await interaction.reply({ 
+                content: '❌ Error procesando solicitud', 
+                ephemeral: true 
             });
         }
     }
 });
 
 // ==================== MANEJADOR DE ERRORES ====================
+client.on('error', error => {
+    console.error('❌ Error del cliente:', error);
+});
+
 process.on('unhandledRejection', error => {
     console.error('❌ Error no manejado:', error);
 });
 
 // ==================== INICIAR BOT ====================
-client.login(TOKEN).catch(error => {
-    console.error('❌ Error al iniciar sesión:', error);
+console.log('🔄 Intentando conectar el bot...');
+client.login(process.env.DISCORD_TOKEN).then(() => {
+    console.log('🟢 Login exitoso!');
+}).catch(error => {
+    console.error('❌ ERROR FATAL - No se pudo conectar:');
+    console.error(`   • Mensaje: ${error.message}`);
+    if (error.message.includes('token')) {
+        console.error('   • Solución: El token es inválido. Regenera el token en Discord Developer Portal');
+    }
+    process.exit(1);
 });
