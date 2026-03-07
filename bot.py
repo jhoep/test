@@ -115,6 +115,9 @@ tree = bot.tree
 tickets_activos: dict = {}
 ticket_counter: int = 0
 
+# Almacena autoroles registrados  {role_id (int): nombre (str)}
+autoroles_registrados: dict = {}
+
 
 # ──────────────────────────────────────────────
 #  UTILIDADES
@@ -455,8 +458,7 @@ class VistaPanelPrincipal(discord.ui.View):
                 "🏦 **Bancolombia**\n"
                 "🏪 **OXXO**\n"
                 "🏦 **Transferencia Mexicana**\n"
-                "🛒 **MercadoPago**\n"
-                "🟡 **Binance**"
+                "🛒 **MercadoPago**"
             ),
             color=0x2ECC71,
         )
@@ -485,8 +487,168 @@ class VistaPanelPrincipal(discord.ui.View):
 
 
 # ──────────────────────────────────────────────
-#  SLASH COMMANDS
+#  PANEL 2 — SISTEMA DE AUTOROLES
 # ──────────────────────────────────────────────
+
+class ModalAgregarRol(discord.ui.Modal, title="➕ Agregar Autorol"):
+    role_id_input = discord.ui.TextInput(
+        label="ID del rol",
+        placeholder="Ej: 123456789012345678",
+        min_length=15,
+        max_length=20,
+        required=True,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "❌ Solo los administradores pueden agregar autoroles.", ephemeral=True
+            )
+            return
+
+        try:
+            role_id = int(self.role_id_input.value.strip())
+        except ValueError:
+            await interaction.response.send_message(
+                "❌ La ID del rol debe ser un número válido.", ephemeral=True
+            )
+            return
+
+        role = interaction.guild.get_role(role_id)
+        if not role:
+            await interaction.response.send_message(
+                f"❌ No encontré ningún rol con la ID `{role_id}` en este servidor.", ephemeral=True
+            )
+            return
+
+        if role_id in autoroles_registrados:
+            await interaction.response.send_message(
+                f"⚠️ El rol **{role.name}** ya está registrado como autorol.", ephemeral=True
+            )
+            return
+
+        autoroles_registrados[role_id] = role.name
+        await interaction.response.send_message(
+            f"✅ Rol **{role.name}** agregado a los autoroles correctamente.", ephemeral=True
+        )
+
+
+class VistaAutorolSelect(discord.ui.View):
+    def __init__(self, roles_disponibles: list):
+        super().__init__(timeout=60)
+        opciones = [
+            discord.SelectOption(label=nombre, value=str(rid))
+            for rid, nombre in roles_disponibles
+        ]
+        select = discord.ui.Select(
+            placeholder="Selecciona un rol para obtenerlo o quitarlo…",
+            options=opciones,
+            custom_id="autorol_select",
+        )
+        select.callback = self.select_callback
+        self.add_item(select)
+
+    async def select_callback(self, interaction: discord.Interaction):
+        role_id = int(interaction.data["values"][0])
+        role = interaction.guild.get_role(role_id)
+        if not role:
+            await interaction.response.send_message(
+                "❌ No se encontró el rol. Puede que haya sido eliminado.", ephemeral=True
+            )
+            return
+
+        if role in interaction.user.roles:
+            await interaction.user.remove_roles(role, reason="Autorol quitado por el usuario")
+            await interaction.response.send_message(
+                f"➖ Se te quitó el rol **{role.name}**.", ephemeral=True
+            )
+        else:
+            await interaction.user.add_roles(role, reason="Autorol asignado por el usuario")
+            await interaction.response.send_message(
+                f"✅ Se te asignó el rol **{role.name}**.", ephemeral=True
+            )
+
+
+class VistaPanelAutoroles(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="➕ Agregar rol",
+        style=discord.ButtonStyle.success,
+        custom_id="panel2_agregar_rol",
+        emoji="🛡️",
+    )
+    async def agregar_rol(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "❌ Solo los administradores pueden agregar autoroles.", ephemeral=True
+            )
+            return
+        await interaction.response.send_modal(ModalAgregarRol())
+
+    @discord.ui.button(
+        label="🎭 Obtener autorol",
+        style=discord.ButtonStyle.primary,
+        custom_id="panel2_obtener_autorol",
+        emoji="🎖️",
+    )
+    async def obtener_autorol(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not autoroles_registrados:
+            await interaction.response.send_message(
+                "❌ No hay autoroles configurados aún. Un administrador debe agregar roles primero.",
+                ephemeral=True,
+            )
+            return
+
+        # Filtrar roles que aún existen en el servidor
+        roles_validos = [
+            (rid, nombre)
+            for rid, nombre in autoroles_registrados.items()
+            if interaction.guild.get_role(rid) is not None
+        ]
+
+        if not roles_validos:
+            await interaction.response.send_message(
+                "❌ Los roles registrados ya no existen en el servidor.", ephemeral=True
+            )
+            return
+
+        # Discord permite máximo 25 opciones en un select
+        roles_validos = roles_validos[:25]
+
+        embed = discord.Embed(
+            title="🎭 Autoroles disponibles",
+            description="Selecciona un rol para obtenerlo.\nSi ya lo tienes, te será **quitado**.",
+            color=0x9B59B6,
+        )
+        for rid, nombre in roles_validos:
+            role = interaction.guild.get_role(rid)
+            tiene = "✅" if role in interaction.user.roles else "➖"
+            embed.add_field(name=f"{tiene} {nombre}", value=f"<@&{rid}>", inline=True)
+
+        vista = VistaAutorolSelect(roles_validos)
+        await interaction.response.send_message(embed=embed, view=vista, ephemeral=True)
+
+
+@tree.command(name="panel2", description="🛡️ Envía el panel de autoroles", guild=discord.Object(id=GUILD_ID))
+@app_commands.checks.has_permissions(administrator=True)
+async def cmd_panel2(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🎭 Panel de Autoroles",
+        description=(
+            "Aquí puedes gestionar los **autoroles** del servidor.\n\n"
+            "🛡️ **Agregar rol** — Registra un rol por su ID *(solo admins)*\n"
+            "🎖️ **Obtener autorol** — Elige un rol para asignártelo o quitártelo\n"
+        ),
+        color=0x9B59B6,
+    )
+    embed.set_footer(text="Panel de autoroles • Solo admins pueden agregar roles")
+    await interaction.channel.send(embed=embed, view=VistaPanelAutoroles())
+    await interaction.response.send_message("✅ Panel de autoroles enviado.", ephemeral=True)
+
+
+
 
 @tree.command(name="panel", description="📌 Envía el panel principal de compra de Robux", guild=discord.Object(id=GUILD_ID))
 @app_commands.checks.has_permissions(administrator=True)
@@ -625,6 +787,7 @@ async def on_ready():
 
     bot.add_view(VistaPanelPrincipal())
     bot.add_view(VistaTicket())
+    bot.add_view(VistaPanelAutoroles())
 
     try:
         await tree.sync(guild=discord.Object(id=GUILD_ID))
