@@ -10,7 +10,7 @@ import time as _time
 from keep_alive import keep_alive
 
 # ============================================================
-#  CONFIGURACIÓN — variables de entorno (Render.com)
+#  CONFIGURACION — variables de entorno (Render.com)
 # ============================================================
 BOT_TOKEN           = os.environ.get("BOT_TOKEN", "")
 GUILD_ID            = int(os.environ.get("GUILD_ID", "0"))  # ⚠️ Configura GUILD_ID en Render
@@ -44,15 +44,15 @@ def precio_usd_aproximado(robux: int) -> float:
     Precio USD para cualquier cantidad de Robux.
     - Cantidades de la tabla → precio exacto del vendedor.
     - Cualquier otra cantidad (ej: 17,000 / 50,000) → tasa $0.005/R$.
-    Sin límite superior.
+    Sin limite superior.
     """
     if robux in PRECIOS_ROBUX:
         return PRECIOS_ROBUX[robux]
-    # Tasa constante: misma relación que toda la tabla
+    # Tasa constante: misma relacion que toda la tabla
     return round(robux * TASA_USD_POR_ROBUX, 2)
 
 # ──────────────────────────────────────────────────────────
-#  TASAS DE CAMBIO EN TIEMPO REAL  (caché de 1 hora)
+#  TASAS DE CAMBIO EN TIEMPO REAL  (cache de 1 hora)
 # ──────────────────────────────────────────────────────────
 
 _tasas_cache: dict = {}
@@ -74,16 +74,16 @@ async def obtener_tasas_live():
                     return _tasas_cache
     except Exception:
         pass
-    return {}  # falla silenciosa → usa tasa estática de fallback
+    return {}  # falla silenciosa → usa tasa estatica de fallback
 
 # Tipos de cambio aproximados (USD → moneda local)
-# Actualiza según necesites o intégralos con una API de tasas
+# Actualiza segun necesites o integralos con una API de tasas
 TASAS_CAMBIO = {
-    "MX": {"nombre": "México",       "moneda": "MXN", "simbolo": "$",  "tasa": 17.50},
+    "MX": {"nombre": "Mexico",       "moneda": "MXN", "simbolo": "$",  "tasa": 17.50},
     "AR": {"nombre": "Argentina",    "moneda": "ARS", "simbolo": "$",  "tasa": 900.0},
     "CO": {"nombre": "Colombia",     "moneda": "COP", "simbolo": "$",  "tasa": 4000.0},
     "CL": {"nombre": "Chile",        "moneda": "CLP", "simbolo": "$",  "tasa": 930.0},
-    "PE": {"nombre": "Perú",         "moneda": "PEN", "simbolo": "S/", "tasa": 3.75},
+    "PE": {"nombre": "Peru",         "moneda": "PEN", "simbolo": "S/", "tasa": 3.75},
     "VE": {"nombre": "Venezuela",    "moneda": "USD", "simbolo": "$",  "tasa": 1.0},
     "EC": {"nombre": "Ecuador",      "moneda": "USD", "simbolo": "$",  "tasa": 1.0},
     "BO": {"nombre": "Bolivia",      "moneda": "BOB", "simbolo": "Bs", "tasa": 6.90},
@@ -97,7 +97,7 @@ TASAS_CAMBIO = {
     "HN": {"nombre": "Honduras",     "moneda": "HNL", "simbolo": "L",  "tasa": 24.70},
     "NI": {"nombre": "Nicaragua",    "moneda": "NIO", "simbolo": "C$", "tasa": 36.60},
     "CR": {"nombre": "Costa Rica",   "moneda": "CRC", "simbolo": "₡",  "tasa": 520.0},
-    "PA": {"nombre": "Panamá",       "moneda": "USD", "simbolo": "$",  "tasa": 1.0},
+    "PA": {"nombre": "Panama",       "moneda": "USD", "simbolo": "$",  "tasa": 1.0},
     "DO": {"nombre": "Rep. Dominicana","moneda": "DOP","simbolo": "RD$","tasa": 57.0},
     "CU": {"nombre": "Cuba",         "moneda": "CUP", "simbolo": "$",  "tasa": 24.0},
     "PR": {"nombre": "Puerto Rico",  "moneda": "USD", "simbolo": "$",  "tasa": 1.0},
@@ -125,7 +125,7 @@ autoroles_registrados: dict = {}
 
 async def calcular_precio(robux: int, codigo_pais: str) -> Tuple:
     """Retorna (precio_local, texto_formateado, usd).
-    Usa tasas de cambio en tiempo real; cae en estáticas si falla la API."""
+    Usa tasas de cambio en tiempo real; cae en estaticas si falla la API."""
     info = TASAS_CAMBIO.get(codigo_pais.upper())
     if not info:
         return None, None, None
@@ -137,7 +137,7 @@ async def calcular_precio(robux: int, codigo_pais: str) -> Tuple:
     if rates and moneda in rates:
         tasa = rates[moneda]
     else:
-        tasa = info["tasa"]   # fallback estático
+        tasa = info["tasa"]   # fallback estatico
 
     local = usd * tasa
     texto = f"{info['simbolo']}{local:,.2f} {info['moneda']}"
@@ -157,14 +157,14 @@ def opciones_paises():
 
 class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
     pais = discord.ui.TextInput(
-        label="Código de tu país (ej: MX, AR, CO, ES…)",
+        label="Codigo de tu pais (ej: MX, AR, CO, ES…)",
         placeholder="MX",
         min_length=2,
         max_length=2,
         required=True,
     )
     cantidad = discord.ui.TextInput(
-        label="¿Cuántos Robux quieres?",
+        label="¿Cuantos Robux quieres?",
         placeholder="1000, 2000, 3000, 5000, 7000, 10000…",
         min_length=1,
         max_length=6,
@@ -176,7 +176,7 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
         required=True,
     )
     metodo_pago = discord.ui.TextInput(
-        label="Método de pago preferido",
+        label="Metodo de pago preferido",
         placeholder="PayPal, transferencia, Binance, Nequi…",
         required=True,
     )
@@ -193,8 +193,8 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
         codigo = self.pais.value.strip().upper()
         if codigo not in TASAS_CAMBIO:
             await interaction.response.send_message(
-                f"❌ Código de país **{codigo}** no reconocido.\n"
-                f"Códigos disponibles: {', '.join(TASAS_CAMBIO.keys())}",
+                f"❌ Codigo de pais **{codigo}** no reconocido.\n"
+                f"Codigos disponibles: {', '.join(TASAS_CAMBIO.keys())}",
                 ephemeral=True,
             )
             return
@@ -205,13 +205,13 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
                 raise ValueError
         except ValueError:
             await interaction.response.send_message(
-                "❌ Ingresa una cantidad válida de Robux (número entero positivo).",
+                "❌ Ingresa una cantidad valida de Robux (numero entero positivo).",
                 ephemeral=True,
             )
             return
         if robux > 50_000:
             await interaction.response.send_message(
-                "❌ La cantidad máxima es **50,000 Robux** por ticket.",
+                "❌ La cantidad maxima es **50,000 Robux** por ticket.",
                 ephemeral=True,
             )
             return
@@ -234,7 +234,7 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
             ),
         }
 
-        # Agregar rol de staff si está configurado
+        # Agregar rol de staff si esta configurado
         if STAFF_ROLE_ID:
             staff_role = guild.get_role(STAFF_ROLE_ID)
             if staff_role:
@@ -269,17 +269,17 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
         embed = discord.Embed(
             title="🎮 Nuevo Ticket de Compra de Robux",
             description=f"Hola {interaction.user.mention}, tu solicitud fue registrada.\n"
-                        f"Un staff te atenderá en breve. ⚡",
+                        f"Un staff te atendera en breve. ⚡",
             color=0x00BFFF,
             timestamp=datetime.datetime.utcnow(),
         )
         embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Roblox_Logo_2022.svg/512px-Roblox_Logo_2022.svg.png")
         embed.add_field(name="👤 Comprador",       value=interaction.user.mention,                inline=True)
-        embed.add_field(name="🌍 País",            value=f"{info_pais['nombre']} ({info_pais['moneda']})", inline=True)
+        embed.add_field(name="🌍 Pais",            value=f"{info_pais['nombre']} ({info_pais['moneda']})", inline=True)
         embed.add_field(name="🎲 Robux solicitados", value=f"**{robux:,} R$**",                  inline=True)
         embed.add_field(name="💵 Precio USD",        value=f"**${usd:.2f} USD**",                  inline=True)
         embed.add_field(name="💰 Precio local",    value=f"**{precio_texto}**",                  inline=True)
-        embed.add_field(name="💳 Método de pago",  value=self.metodo_pago.value.strip(),         inline=True)
+        embed.add_field(name="💳 Metodo de pago",  value=self.metodo_pago.value.strip(),         inline=True)
         embed.add_field(name="🎮 Usuario Roblox",  value=self.usuario_roblox.value.strip(),      inline=False)
         if self.notas.value.strip():
             embed.add_field(name="📝 Notas",       value=self.notas.value.strip(),               inline=False)
@@ -323,14 +323,14 @@ class VistaTicket(discord.ui.View):
     async def pagado(self, interaction: discord.Interaction, button: discord.ui.Button):
         datos = tickets_activos.get(interaction.channel_id)
         if not datos:
-            await interaction.response.send_message("❌ No encontré datos de este ticket.", ephemeral=True)
+            await interaction.response.send_message("❌ No encontre datos de este ticket.", ephemeral=True)
             return
 
         embed = discord.Embed(
             title="✅ Pago confirmado",
             description=f"El pago de **{datos['robux']:,} Robux** fue marcado como recibido.\n"
                         f"Usuario Roblox: **{datos['usuario_roblox']}**\n"
-                        f"Los Robux serán enviados pronto. 🎮",
+                        f"Los Robux seran enviados pronto. 🎮",
             color=0x2ECC71,
             timestamp=datetime.datetime.utcnow(),
         )
@@ -375,11 +375,11 @@ class VistaTicket(discord.ui.View):
         info_pais = TASAS_CAMBIO.get(datos["pais"], {})
         embed = discord.Embed(title="📋 Resumen del ticket", color=0x9B59B6)
         embed.add_field(name="Robux",          value=f"{datos['robux']:,} R$",        inline=True)
-        embed.add_field(name="País",           value=info_pais.get("nombre", "?"),    inline=True)
+        embed.add_field(name="Pais",           value=info_pais.get("nombre", "?"),    inline=True)
         embed.add_field(name="Precio USD",     value=f"${datos['precio_usd']:.2f}",   inline=True)
         embed.add_field(name="Precio local",   value=datos["precio_texto"],           inline=True)
         embed.add_field(name="Usuario Roblox", value=datos["usuario_roblox"],         inline=True)
-        embed.add_field(name="Método de pago", value=datos["metodo_pago"],            inline=True)
+        embed.add_field(name="Metodo de pago", value=datos["metodo_pago"],            inline=True)
         embed.add_field(name="Estado",         value="🟢 Abierto" if datos["abierto"] else "🔴 Cerrado", inline=True)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -415,7 +415,7 @@ class VistaPanelPrincipal(discord.ui.View):
         )
         # Obtener tasas live
         rates = await obtener_tasas_live()
-        fuente = "🌐 Tasas en tiempo real" if rates else "📌 Tasas estáticas (fallback)"
+        fuente = "🌐 Tasas en tiempo real" if rates else "📌 Tasas estaticas (fallback)"
 
         # Tabla oficial USD (vendedor + extra hasta 50k)
         tabla_usd = ""
@@ -440,14 +440,14 @@ class VistaPanelPrincipal(discord.ui.View):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(
-        label="💳 Métodos de pago",
+        label="💳 Metodos de pago",
         style=discord.ButtonStyle.secondary,
         custom_id="panel_metodos_pago",
         emoji="💰",
     )
     async def metodos_pago(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = discord.Embed(
-            title="💳 Métodos de Pago Disponibles",
+            title="💳 Metodos de Pago Disponibles",
             description=(
                 "🪙 **Crypto**\n"
                 "💸 **CashApp**\n"
@@ -475,14 +475,14 @@ class VistaPanelPrincipal(discord.ui.View):
             title="❓ Preguntas frecuentes",
             color=0x1ABC9C,
         )
-        embed.add_field(name="¿Cómo compro Robux?",
+        embed.add_field(name="¿Como compro Robux?",
                         value="Haz clic en **🎮 Comprar Robux**, completa el formulario y espera a un staff.", inline=False)
-        embed.add_field(name="¿Cuánto tiempo tarda?",
-                        value="Normalmente entre 5 y 30 minutos según disponibilidad del staff.", inline=False)
-        embed.add_field(name="¿Qué métodos de pago aceptan?",
-                        value="Crypto, CashApp, PayPal, Nequi, Bancolombia, OXXO, Transferencia, Yape, MercadoPago y más.", inline=False)
+        embed.add_field(name="¿Cuanto tiempo tarda?",
+                        value="Normalmente entre 5 y 30 minutos segun disponibilidad del staff.", inline=False)
+        embed.add_field(name="¿Que metodos de pago aceptan?",
+                        value="Crypto, CashApp, PayPal, Nequi, Bancolombia, OXXO, Transferencia, Yape, MercadoPago y mas.", inline=False)
         embed.add_field(name="¿Es seguro?",
-                        value="Sí, nuestro staff verificado gestiona cada transacción manualmente.", inline=False)
+                        value="Si, nuestro staff verificado gestiona cada transaccion manualmente.", inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
@@ -510,20 +510,20 @@ class ModalAgregarRol(discord.ui.Modal, title="➕ Agregar Autorol"):
             role_id = int(self.role_id_input.value.strip())
         except ValueError:
             await interaction.response.send_message(
-                "❌ La ID del rol debe ser un número válido.", ephemeral=True
+                "❌ La ID del rol debe ser un numero valido.", ephemeral=True
             )
             return
 
         role = interaction.guild.get_role(role_id)
         if not role:
             await interaction.response.send_message(
-                f"❌ No encontré ningún rol con la ID `{role_id}` en este servidor.", ephemeral=True
+                f"❌ No encontre ningun rol con la ID `{role_id}` en este servidor.", ephemeral=True
             )
             return
 
         if role_id in autoroles_registrados:
             await interaction.response.send_message(
-                f"⚠️ El rol **{role.name}** ya está registrado como autorol.", ephemeral=True
+                f"⚠️ El rol **{role.name}** ya esta registrado como autorol.", ephemeral=True
             )
             return
 
@@ -552,7 +552,7 @@ class VistaAutorolSelect(discord.ui.View):
         role = interaction.guild.get_role(role_id)
         if not role:
             await interaction.response.send_message(
-                "❌ No se encontró el rol. Puede que haya sido eliminado.", ephemeral=True
+                "❌ No se encontro el rol. Puede que haya sido eliminado.", ephemeral=True
             )
             return
 
@@ -560,16 +560,16 @@ class VistaAutorolSelect(discord.ui.View):
             if role in interaction.user.roles:
                 await interaction.user.remove_roles(role, reason="Autorol quitado por el usuario")
                 await interaction.response.send_message(
-                    f"➖ Se te quitó el rol **{role.name}**.", ephemeral=True
+                    f"➖ Se te quito el rol **{role.name}**.", ephemeral=True
                 )
             else:
                 await interaction.user.add_roles(role, reason="Autorol asignado por el usuario")
                 await interaction.response.send_message(
-                    f"✅ Se te asignó el rol **{role.name}**.", ephemeral=True
+                    f"✅ Se te asigno el rol **{role.name}**.", ephemeral=True
                 )
         except discord.Forbidden:
             await interaction.response.send_message(
-                "❌ No tengo permisos para asignar ese rol. Asegúrate de que mi rol esté por encima del rol a asignar.",
+                "❌ No tengo permisos para asignar ese rol. Asegurate de que mi rol este por encima del rol a asignar.",
                 ephemeral=True,
             )
 
@@ -599,12 +599,12 @@ class VistaPanelAutoroles(discord.ui.View):
     async def obtener_autorol(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not autoroles_registrados:
             await interaction.response.send_message(
-                "❌ No hay autoroles configurados aún. Un administrador debe agregar roles primero.",
+                "❌ No hay autoroles configurados aun. Un administrador debe agregar roles primero.",
                 ephemeral=True,
             )
             return
 
-        # Filtrar roles que aún existen en el servidor
+        # Filtrar roles que aun existen en el servidor
         roles_validos = [
             (rid, nombre)
             for rid, nombre in autoroles_registrados.items()
@@ -617,12 +617,12 @@ class VistaPanelAutoroles(discord.ui.View):
             )
             return
 
-        # Discord permite máximo 25 opciones en un select
+        # Discord permite maximo 25 opciones en un select
         roles_validos = roles_validos[:25]
 
         embed = discord.Embed(
             title="🎭 Autoroles disponibles",
-            description="Selecciona un rol para obtenerlo.\nSi ya lo tienes, te será **quitado**.",
+            description="Selecciona un rol para obtenerlo.\nSi ya lo tienes, te sera **quitado**.",
             color=0x9B59B6,
         )
         for rid, nombre in roles_validos:
@@ -634,15 +634,15 @@ class VistaPanelAutoroles(discord.ui.View):
         await interaction.response.send_message(embed=embed, view=vista, ephemeral=True)
 
 
-@tree.command(name="panel2", description="🛡️ Envía el panel de autoroles", guild=discord.Object(id=GUILD_ID))
+@tree.command(name="panel2", description="🛡️ Envia el panel de autoroles", guild=discord.Object(id=GUILD_ID))
 @app_commands.checks.has_permissions(administrator=True)
 async def cmd_panel2(interaction: discord.Interaction):
     embed = discord.Embed(
         title="Panel de Autoroles",
         description=(
-            "Aquí puedes gestionar los **autoroles** del servidor.\n\n"
+            "Aqui puedes gestionar los **autoroles** del servidor.\n\n"
             "**Agregar rol** — Registra un rol por su ID *(solo admins)*\n"
-            "**Obtener autorol** — Elige un rol para asignártelo o quitártelo\n"
+            "**Obtener autorol** — Elige un rol para asignartelo o quitartelo\n"
         ),
         color=0x9B59B6,
     )
@@ -652,16 +652,16 @@ async def cmd_panel2(interaction: discord.Interaction):
 
 
 
-@tree.command(name="panel", description="📌 Envía el panel principal de compra de Robux", guild=discord.Object(id=GUILD_ID))
+@tree.command(name="panel", description="📌 Envia el panel principal de compra de Robux", guild=discord.Object(id=GUILD_ID))
 @app_commands.checks.has_permissions(administrator=True)
 async def cmd_panel(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🎮 Tienda de Robux",
         description=(
             "¡Bienvenido a nuestra tienda de **Robux**! 💎\n\n"
-            "Puedes comprar Robux de forma rápida y segura.\n"
-            "El precio se calcula automáticamente en la **moneda de tu país**.\n\n"
-            "👇 Elige una opción:"
+            "Puedes comprar Robux de forma rapida y segura.\n"
+            "El precio se calcula automaticamente en la **moneda de tu pais**.\n\n"
+            "👇 Elige una opcion:"
         ),
         color=0x00BFFF,
     )
@@ -671,12 +671,12 @@ async def cmd_panel(interaction: discord.Interaction):
 
 
 @tree.command(name="precio", description="💰 Calcula el precio de Robux en tu moneda local", guild=discord.Object(id=GUILD_ID))
-@app_commands.describe(robux="Cantidad de Robux", pais="Código de tu país (MX, AR, CO…)")
+@app_commands.describe(robux="Cantidad de Robux", pais="Codigo de tu pais (MX, AR, CO…)")
 async def cmd_precio(interaction: discord.Interaction, robux: int, pais: str):
     codigo = pais.strip().upper()
     if codigo not in TASAS_CAMBIO:
         await interaction.response.send_message(
-            f"❌ Código **{codigo}** no reconocido. Usa alguno de: {', '.join(TASAS_CAMBIO.keys())}",
+            f"❌ Codigo **{codigo}** no reconocido. Usa alguno de: {', '.join(TASAS_CAMBIO.keys())}",
             ephemeral=True,
         )
         return
@@ -690,10 +690,10 @@ async def cmd_precio(interaction: discord.Interaction, robux: int, pais: str):
     rates = await obtener_tasas_live()
     moneda_code = info["moneda"]
     tasa_usada = rates.get(moneda_code, info["tasa"]) if rates else info["tasa"]
-    fuente_tasa = "🌐 Tasa en tiempo real" if (rates and moneda_code in rates) else "📌 Tasa estática (fallback)"
+    fuente_tasa = "🌐 Tasa en tiempo real" if (rates and moneda_code in rates) else "📌 Tasa estatica (fallback)"
     embed = discord.Embed(title="💰 Calculadora de Robux", color=0xF39C12)
     embed.add_field(name="🎲 Robux",        value=f"**{robux:,} R$**",              inline=True)
-    embed.add_field(name="🌍 País",         value=info["nombre"],                   inline=True)
+    embed.add_field(name="🌍 Pais",         value=info["nombre"],                   inline=True)
     embed.add_field(name="💵 Precio USD",   value=f"**${usd:.2f}**",               inline=True)
     embed.add_field(name="💰 Precio local", value=f"**{precio_texto}**",            inline=True)
     embed.add_field(name="📈 Tasa usada",   value=f"1 USD = {tasa_usada:,.4f} {moneda_code}\n*{fuente_tasa}*", inline=True)
@@ -732,13 +732,13 @@ async def cmd_cerrar(interaction: discord.Interaction):
     await interaction.channel.delete(reason=f"Cerrado por {interaction.user}")
 
 
-@tree.command(name="send", description="📊 Envía la tabla de precios de Robux al canal (solo staff)", guild=discord.Object(id=GUILD_ID))
+@tree.command(name="send", description="📊 Envia la tabla de precios de Robux al canal (solo staff)", guild=discord.Object(id=GUILD_ID))
 @app_commands.checks.has_permissions(administrator=True)
 async def cmd_send(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
 
     rates = await obtener_tasas_live()
-    fuente = "🌐 Tasas en tiempo real" if rates else "📌 Tasas estáticas (fallback)"
+    fuente = "🌐 Tasas en tiempo real" if rates else "📌 Tasas estaticas (fallback)"
 
     # Solo cantidades de la tabla + 40k y 50k — todos con ✅
     cantidades_mostrar = list(PRECIOS_ROBUX.keys()) + [40_000, 50_000]
@@ -761,7 +761,7 @@ async def cmd_send(interaction: discord.Interaction):
         col_usd += f"✅ `{r:>6,} R$` -> **${p:.2f}**\n"
     embed.add_field(name="💵 Precios en USD", value=col_usd, inline=True)
 
-    # Columnas por país — todos con ✅
+    # Columnas por pais — todos con ✅
     paises_tabla = ["MX", "AR", "CO", "CL", "ES"]
     for pais_code in paises_tabla:
         info_p = TASAS_CAMBIO[pais_code]
