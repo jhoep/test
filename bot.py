@@ -459,7 +459,6 @@ class VistaPanelPrincipal(discord.ui.View):
             ),
             color=0x2ECC71,
         )
-        embed.set_footer(text="💡 Menciona tu método preferido al abrir un ticket")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(
