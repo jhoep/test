@@ -455,7 +455,8 @@ class VistaPanelPrincipal(discord.ui.View):
                 "🏦 **Bancolombia**\n"
                 "🏪 **OXXO**\n"
                 "🏦 **Transferencia Mexicana**\n"
-                "🛒 **MercadoPago**"
+                "🛒 **MercadoPago**\n"
+                "🟡 **Binance**"
             ),
             color=0x2ECC71,
         )
