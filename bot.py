@@ -574,10 +574,9 @@ class VistaPanelAutoroles(discord.ui.View):
         super().__init__(timeout=None)
 
     @discord.ui.button(
-        label="➕ Agregar rol",
+        label="Agregar rol",
         style=discord.ButtonStyle.success,
         custom_id="panel2_agregar_rol",
-        emoji="🛡️",
     )
     async def agregar_rol(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator:
@@ -588,10 +587,9 @@ class VistaPanelAutoroles(discord.ui.View):
         await interaction.response.send_modal(ModalAgregarRol())
 
     @discord.ui.button(
-        label="🎭 Obtener autorol",
+        label="Obtener autorol",
         style=discord.ButtonStyle.primary,
         custom_id="panel2_obtener_autorol",
-        emoji="🎖️",
     )
     async def obtener_autorol(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not autoroles_registrados:
@@ -635,11 +633,11 @@ class VistaPanelAutoroles(discord.ui.View):
 @app_commands.checks.has_permissions(administrator=True)
 async def cmd_panel2(interaction: discord.Interaction):
     embed = discord.Embed(
-        title="🎭 Panel de Autoroles",
+        title="Panel de Autoroles",
         description=(
             "Aquí puedes gestionar los **autoroles** del servidor.\n\n"
-            "🛡️ **Agregar rol** — Registra un rol por su ID *(solo admins)*\n"
-            "🎖️ **Obtener autorol** — Elige un rol para asignártelo o quitártelo\n"
+            "**Agregar rol** — Registra un rol por su ID *(solo admins)*\n"
+            "**Obtener autorol** — Elige un rol para asignártelo o quitártelo\n"
         ),
         color=0x9B59B6,
     )
