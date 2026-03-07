@@ -535,7 +535,7 @@ class ModalAgregarRol(discord.ui.Modal, title="➕ Agregar Autorol"):
 
 class VistaAutorolSelect(discord.ui.View):
     def __init__(self, roles_disponibles: list):
-        super().__init__(timeout=60)
+        super().__init__(timeout=120)
         opciones = [
             discord.SelectOption(label=nombre, value=str(rid))
             for rid, nombre in roles_disponibles
@@ -543,7 +543,6 @@ class VistaAutorolSelect(discord.ui.View):
         select = discord.ui.Select(
             placeholder="Selecciona un rol para obtenerlo o quitarlo…",
             options=opciones,
-            custom_id="autorol_select",
         )
         select.callback = self.select_callback
         self.add_item(select)
@@ -557,15 +556,21 @@ class VistaAutorolSelect(discord.ui.View):
             )
             return
 
-        if role in interaction.user.roles:
-            await interaction.user.remove_roles(role, reason="Autorol quitado por el usuario")
+        try:
+            if role in interaction.user.roles:
+                await interaction.user.remove_roles(role, reason="Autorol quitado por el usuario")
+                await interaction.response.send_message(
+                    f"➖ Se te quitó el rol **{role.name}**.", ephemeral=True
+                )
+            else:
+                await interaction.user.add_roles(role, reason="Autorol asignado por el usuario")
+                await interaction.response.send_message(
+                    f"✅ Se te asignó el rol **{role.name}**.", ephemeral=True
+                )
+        except discord.Forbidden:
             await interaction.response.send_message(
-                f"➖ Se te quitó el rol **{role.name}**.", ephemeral=True
-            )
-        else:
-            await interaction.user.add_roles(role, reason="Autorol asignado por el usuario")
-            await interaction.response.send_message(
-                f"✅ Se te asignó el rol **{role.name}**.", ephemeral=True
+                "❌ No tengo permisos para asignar ese rol. Asegúrate de que mi rol esté por encima del rol a asignar.",
+                ephemeral=True,
             )
 
 
