@@ -646,7 +646,6 @@ async def cmd_panel2(interaction: discord.Interaction):
         ),
         color=0x9B59B6,
     )
-    embed.set_footer(text="Panel de autoroles • Solo admins pueden agregar roles")
     await interaction.channel.send(embed=embed, view=VistaPanelAutoroles())
     await interaction.response.send_message("✅ Panel de autoroles enviado.", ephemeral=True)
 
@@ -667,7 +666,6 @@ async def cmd_panel(interaction: discord.Interaction):
         color=0x00BFFF,
     )
     embed.set_image(url="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Roblox_Logo_2022.svg/512px-Roblox_Logo_2022.svg.png")
-    embed.set_footer(text="Tienda oficial • Precios en moneda local")
     await interaction.channel.send(embed=embed, view=VistaPanelPrincipal())
     await interaction.response.send_message("✅ Panel enviado.", ephemeral=True)
 
