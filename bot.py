@@ -445,46 +445,19 @@ class VistaPanelPrincipal(discord.ui.View):
     async def metodos_pago(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = discord.Embed(
             title="💳 Métodos de Pago Disponibles",
-            description="Aceptamos los siguientes métodos de pago:\n\u200b",
-            color=0x2ECC71,
-        )
-        embed.add_field(
-            name="🌐 Internacional",
-            value=(
+            description=(
                 "🪙 **Crypto** — Bitcoin, USDT, ETH y más\n"
-                "💸 **CashApp** — Para usuarios en EE.UU.\n"
-                "🅿️ **PayPal** — Transferencia o saldo"
+                "💸 **CashApp**\n"
+                "🅿️ **PayPal**\n"
+                "📱 **Nequi**\n"
+                "🏦 **Transferencia**\n"
+                "📲 **Yape**\n"
+                "🏦 **Bancolombia**\n"
+                "🏪 **OXXO**\n"
+                "🏦 **Transferencia Mexicana**\n"
+                "🛒 **MercadoPago**"
             ),
-            inline=False,
-        )
-        embed.add_field(
-            name="🇨🇴 Colombia",
-            value=(
-                "📱 **Nequi** — Pago por app\n"
-                "🏦 **Bancolombia** — Transferencia bancaria"
-            ),
-            inline=True,
-        )
-        embed.add_field(
-            name="🇲🇽 México",
-            value=(
-                "🏪 **OXXO** — Pago en tienda\n"
-                "🏦 **Transferencia Mexicana** — SPEI/interbancaria"
-            ),
-            inline=True,
-        )
-        embed.add_field(
-            name="🇵🇪 Perú",
-            value="📲 **Yape** — Pago por app",
-            inline=True,
-        )
-        embed.add_field(
-            name="🌎 Latinoamérica General",
-            value=(
-                "🛒 **MercadoPago** — Argentina, México, Colombia y más\n"
-                "🏦 **Transferencia** — Transferencia bancaria general"
-            ),
-            inline=False,
+            color=0x2ECC71,
         )
         embed.set_footer(text="💡 Menciona tu método preferido al abrir un ticket")
         await interaction.response.send_message(embed=embed, ephemeral=True)
