@@ -446,7 +446,7 @@ class VistaPanelPrincipal(discord.ui.View):
         embed = discord.Embed(
             title="💳 Métodos de Pago Disponibles",
             description=(
-                "🪙 **Crypto** — Bitcoin, USDT, ETH y más\n"
+                "🪙 **Crypto**\n"
                 "💸 **CashApp**\n"
                 "🅿️ **PayPal**\n"
                 "📱 **Nequi**\n"
