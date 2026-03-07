@@ -437,6 +437,59 @@ class VistaPanelPrincipal(discord.ui.View):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(
+        label="💳 Métodos de pago",
+        style=discord.ButtonStyle.secondary,
+        custom_id="panel_metodos_pago",
+        emoji="💰",
+    )
+    async def metodos_pago(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="💳 Métodos de Pago Disponibles",
+            description="Aceptamos los siguientes métodos de pago:\n\u200b",
+            color=0x2ECC71,
+        )
+        embed.add_field(
+            name="🌐 Internacional",
+            value=(
+                "🪙 **Crypto** — Bitcoin, USDT, ETH y más\n"
+                "💸 **CashApp** — Para usuarios en EE.UU.\n"
+                "🅿️ **PayPal** — Transferencia o saldo"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="🇨🇴 Colombia",
+            value=(
+                "📱 **Nequi** — Pago por app\n"
+                "🏦 **Bancolombia** — Transferencia bancaria"
+            ),
+            inline=True,
+        )
+        embed.add_field(
+            name="🇲🇽 México",
+            value=(
+                "🏪 **OXXO** — Pago en tienda\n"
+                "🏦 **Transferencia Mexicana** — SPEI/interbancaria"
+            ),
+            inline=True,
+        )
+        embed.add_field(
+            name="🇵🇪 Perú",
+            value="📲 **Yape** — Pago por app",
+            inline=True,
+        )
+        embed.add_field(
+            name="🌎 Latinoamérica General",
+            value=(
+                "🛒 **MercadoPago** — Argentina, México, Colombia y más\n"
+                "🏦 **Transferencia** — Transferencia bancaria general"
+            ),
+            inline=False,
+        )
+        embed.set_footer(text="💡 Menciona tu método preferido al abrir un ticket")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(
         label="❓ Ayuda / FAQ",
         style=discord.ButtonStyle.secondary,
         custom_id="panel_ayuda",
@@ -452,7 +505,7 @@ class VistaPanelPrincipal(discord.ui.View):
         embed.add_field(name="¿Cuánto tiempo tarda?",
                         value="Normalmente entre 5 y 30 minutos según disponibilidad del staff.", inline=False)
         embed.add_field(name="¿Qué métodos de pago aceptan?",
-                        value="PayPal, transferencia bancaria, Binance Pay, Nequi, MercadoPago, entre otros.", inline=False)
+                        value="Crypto, CashApp, PayPal, Nequi, Bancolombia, OXXO, Transferencia, Yape, MercadoPago y más.", inline=False)
         embed.add_field(name="¿Es seguro?",
                         value="Sí, nuestro staff verificado gestiona cada transacción manualmente.", inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -541,8 +594,6 @@ async def cmd_cerrar(interaction: discord.Interaction):
     tickets_activos[interaction.channel_id]["abierto"] = False
     await asyncio.sleep(5)
     await interaction.channel.delete(reason=f"Cerrado por {interaction.user}")
-
-
 
 
 @tree.command(name="send", description="📊 Envía la tabla de precios de Robux al canal (solo staff)", guild=discord.Object(id=GUILD_ID))
