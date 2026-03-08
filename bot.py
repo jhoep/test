@@ -7,138 +7,194 @@ import datetime
 import os
 import aiohttp
 import time as _time
+import json
+import logging
 from keep_alive import keep_alive
+
+# ============================================================
+#  LOGGING
+# ============================================================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("robux-bot")
 
 # ============================================================
 #  CONFIGURACION — variables de entorno (Render.com)
 # ============================================================
 BOT_TOKEN           = os.environ.get("BOT_TOKEN", "")
-GUILD_ID            = int(os.environ.get("GUILD_ID", "0"))  # ⚠️ Configura GUILD_ID en Render
+GUILD_ID            = int(os.environ.get("GUILD_ID", "0"))
 CATEGORY_TICKETS_ID = int(os.environ["CATEGORY_TICKETS_ID"]) if os.environ.get("CATEGORY_TICKETS_ID") else None
 STAFF_ROLE_ID       = int(os.environ["STAFF_ROLE_ID"])       if os.environ.get("STAFF_ROLE_ID")       else None
 LOG_CHANNEL_ID      = int(os.environ["LOG_CHANNEL_ID"])      if os.environ.get("LOG_CHANNEL_ID")      else None
 
+MAX_TICKETS_POR_USUARIO = 3
+
 # ============================================================
 #  TABLA DE PRECIOS DEL VENDEDOR
-#  Tasa constante: $0.005 USD por Robux  (1,000 R$ = $5.00)
-#  La misma tasa aplica para CUALQUIER cantidad — hasta 50k+
 # ============================================================
-TASA_USD_POR_ROBUX = 0.005   # $5.00 por cada 1,000 Robux
+TASA_USD_POR_ROBUX = 0.005
 
 PRECIOS_ROBUX = {
-    1_000:  5.00,
-    2_000: 10.00,
-    3_000: 15.00,
-    5_000: 25.00,
-    7_000: 35.00,
-   10_000: 50.00,
-   15_000: 75.00,
-   20_000:100.00,
-   25_000:125.00,
-   30_000:150.00,
+    1_000:   5.00,
+    2_000:  10.00,
+    3_000:  15.00,
+    5_000:  25.00,
+    7_000:  35.00,
+   10_000:  50.00,
+   15_000:  75.00,
+   20_000: 100.00,
+   25_000: 125.00,
+   30_000: 150.00,
 }
 CANTIDADES_DISPONIBLES = sorted(PRECIOS_ROBUX.keys())
 
+
 def precio_usd_aproximado(robux: int) -> float:
-    """
-    Precio USD para cualquier cantidad de Robux.
-    - Cantidades de la tabla → precio exacto del vendedor.
-    - Cualquier otra cantidad (ej: 17,000 / 50,000) → tasa $0.005/R$.
-    Sin limite superior.
-    """
     if robux in PRECIOS_ROBUX:
         return PRECIOS_ROBUX[robux]
-    # Tasa constante: misma relacion que toda la tabla
     return round(robux * TASA_USD_POR_ROBUX, 2)
+
 
 # ──────────────────────────────────────────────────────────
 #  TASAS DE CAMBIO EN TIEMPO REAL  (cache de 1 hora)
 # ──────────────────────────────────────────────────────────
-
 _tasas_cache: dict = {}
 _tasas_ts: float   = 0.0
-_CACHE_TTL: int    = 3600  # segundos
+_CACHE_TTL: int    = 3600
+
 
 async def obtener_tasas_live():
-    """Obtiene tasas USD→monedas desde exchangerate-api.com (gratis, sin key)."""
     global _tasas_cache, _tasas_ts
     if _tasas_cache and (_time.time() - _tasas_ts) < _CACHE_TTL:
         return _tasas_cache
     try:
         async with aiohttp.ClientSession() as s:
-            async with s.get("https://open.er-api.com/v6/latest/USD", timeout=aiohttp.ClientTimeout(total=8)) as r:
+            async with s.get(
+                "https://open.er-api.com/v6/latest/USD",
+                timeout=aiohttp.ClientTimeout(total=8),
+            ) as r:
                 data = await r.json()
                 if data.get("result") == "success":
                     _tasas_cache = data["rates"]
                     _tasas_ts    = _time.time()
+                    logger.info("✅ Tasas de cambio actualizadas")
                     return _tasas_cache
-    except Exception:
-        pass
-    return {}  # falla silenciosa → usa tasa estatica de fallback
+    except Exception as e:
+        logger.warning(f"⚠️ Error obteniendo tasas: {e}")
+    return {}
 
-# Tipos de cambio aproximados (USD → moneda local)
-# Actualiza segun necesites o integralos con una API de tasas
+
 TASAS_CAMBIO = {
-    "MX": {"nombre": "Mexico",       "moneda": "MXN", "simbolo": "$",  "tasa": 17.50},
-    "AR": {"nombre": "Argentina",    "moneda": "ARS", "simbolo": "$",  "tasa": 900.0},
-    "CO": {"nombre": "Colombia",     "moneda": "COP", "simbolo": "$",  "tasa": 4000.0},
-    "CL": {"nombre": "Chile",        "moneda": "CLP", "simbolo": "$",  "tasa": 930.0},
-    "PE": {"nombre": "Peru",         "moneda": "PEN", "simbolo": "S/", "tasa": 3.75},
-    "VE": {"nombre": "Venezuela",    "moneda": "USD", "simbolo": "$",  "tasa": 1.0},
-    "EC": {"nombre": "Ecuador",      "moneda": "USD", "simbolo": "$",  "tasa": 1.0},
-    "BO": {"nombre": "Bolivia",      "moneda": "BOB", "simbolo": "Bs", "tasa": 6.90},
-    "PY": {"nombre": "Paraguay",     "moneda": "PYG", "simbolo": "₲",  "tasa": 7300.0},
-    "UY": {"nombre": "Uruguay",      "moneda": "UYU", "simbolo": "$",  "tasa": 38.50},
-    "BR": {"nombre": "Brasil",       "moneda": "BRL", "simbolo": "R$", "tasa": 5.00},
-    "ES": {"nombre": "España",       "moneda": "EUR", "simbolo": "€",  "tasa": 0.92},
-    "US": {"nombre": "Estados Unidos","moneda": "USD","simbolo": "$",  "tasa": 1.0},
-    "GT": {"nombre": "Guatemala",    "moneda": "GTQ", "simbolo": "Q",  "tasa": 7.80},
-    "SV": {"nombre": "El Salvador",  "moneda": "USD", "simbolo": "$",  "tasa": 1.0},
-    "HN": {"nombre": "Honduras",     "moneda": "HNL", "simbolo": "L",  "tasa": 24.70},
-    "NI": {"nombre": "Nicaragua",    "moneda": "NIO", "simbolo": "C$", "tasa": 36.60},
-    "CR": {"nombre": "Costa Rica",   "moneda": "CRC", "simbolo": "₡",  "tasa": 520.0},
-    "PA": {"nombre": "Panama",       "moneda": "USD", "simbolo": "$",  "tasa": 1.0},
-    "DO": {"nombre": "Rep. Dominicana","moneda": "DOP","simbolo": "RD$","tasa": 57.0},
-    "CU": {"nombre": "Cuba",         "moneda": "CUP", "simbolo": "$",  "tasa": 24.0},
-    "PR": {"nombre": "Puerto Rico",  "moneda": "USD", "simbolo": "$",  "tasa": 1.0},
+    "MX": {"nombre": "Mexico",        "moneda": "MXN", "simbolo": "$",   "tasa": 17.50},
+    "AR": {"nombre": "Argentina",     "moneda": "ARS", "simbolo": "$",   "tasa": 900.0},
+    "CO": {"nombre": "Colombia",      "moneda": "COP", "simbolo": "$",   "tasa": 4000.0},
+    "CL": {"nombre": "Chile",         "moneda": "CLP", "simbolo": "$",   "tasa": 930.0},
+    "PE": {"nombre": "Peru",          "moneda": "PEN", "simbolo": "S/",  "tasa": 3.75},
+    "VE": {"nombre": "Venezuela",     "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
+    "EC": {"nombre": "Ecuador",       "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
+    "BO": {"nombre": "Bolivia",       "moneda": "BOB", "simbolo": "Bs",  "tasa": 6.90},
+    "PY": {"nombre": "Paraguay",      "moneda": "PYG", "simbolo": "₲",   "tasa": 7300.0},
+    "UY": {"nombre": "Uruguay",       "moneda": "UYU", "simbolo": "$",   "tasa": 38.50},
+    "BR": {"nombre": "Brasil",        "moneda": "BRL", "simbolo": "R$",  "tasa": 5.00},
+    "ES": {"nombre": "España",        "moneda": "EUR", "simbolo": "€",   "tasa": 0.92},
+    "US": {"nombre": "Estados Unidos", "moneda": "USD", "simbolo": "$",  "tasa": 1.0},
+    "GT": {"nombre": "Guatemala",     "moneda": "GTQ", "simbolo": "Q",   "tasa": 7.80},
+    "SV": {"nombre": "El Salvador",   "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
+    "HN": {"nombre": "Honduras",      "moneda": "HNL", "simbolo": "L",   "tasa": 24.70},
+    "NI": {"nombre": "Nicaragua",     "moneda": "NIO", "simbolo": "C$",  "tasa": 36.60},
+    "CR": {"nombre": "Costa Rica",    "moneda": "CRC", "simbolo": "₡",   "tasa": 520.0},
+    "PA": {"nombre": "Panama",        "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
+    "DO": {"nombre": "Rep. Dominicana","moneda": "DOP","simbolo": "RD$", "tasa": 57.0},
+    "CU": {"nombre": "Cuba",          "moneda": "CUP", "simbolo": "$",   "tasa": 24.0},
+    "PR": {"nombre": "Puerto Rico",   "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
 }
 
+# ============================================================
+#  PERSISTENCIA  (JSON)
+# ============================================================
+DATA_FILE = "data.json"
+tickets_activos: dict       = {}
+ticket_counter: int         = 0
+autoroles_registrados: dict = {}
+ticket_lock = asyncio.Lock()
+
+
+def cargar_datos():
+    global tickets_activos, ticket_counter, autoroles_registrados
+    try:
+        with open(DATA_FILE, "r") as f:
+            data = json.load(f)
+            tickets_activos       = {int(k): v for k, v in data.get("tickets", {}).items()}
+            ticket_counter        = data.get("counter", 0)
+            autoroles_registrados = {int(k): v for k, v in data.get("autoroles", {}).items()}
+            logger.info(
+                f"Datos cargados: {len(tickets_activos)} tickets, "
+                f"counter={ticket_counter}, {len(autoroles_registrados)} autoroles"
+            )
+    except FileNotFoundError:
+        logger.info("Archivo de datos no encontrado — iniciando desde cero")
+    except (json.JSONDecodeError, Exception) as e:
+        logger.error(f"Error cargando datos: {e}")
+
+
+def guardar_datos():
+    try:
+        data = {
+            "tickets":   {},
+            "counter":   ticket_counter,
+            "autoroles": {str(k): v for k, v in autoroles_registrados.items()},
+        }
+        for k, v in tickets_activos.items():
+            copia = dict(v)
+            if "creado_en" in copia and isinstance(copia["creado_en"], datetime.datetime):
+                copia["creado_en"] = copia["creado_en"].isoformat()
+            data["tickets"][str(k)] = copia
+        with open(DATA_FILE, "w") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        logger.error(f"Error guardando datos: {e}")
+
+
+# ============================================================
+#  BOT
 # ============================================================
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot  = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
 
-# Almacena tickets en memoria  {canal_id: {datos}}
-tickets_activos: dict = {}
-ticket_counter: int = 0
+# ============================================================
+#  ESTADOS Y COLORES
+# ============================================================
+ESTADOS = {
+    "abierto":    {"emoji": "🟢", "texto": "Abierto",                   "color": 0x00BFFF},
+    "pendiente":  {"emoji": "🟡", "texto": "Pendiente de verificacion", "color": 0xF39C12},
+    "entregado":  {"emoji": "✅", "texto": "Robux entregados",           "color": 0x2ECC71},
+    "cerrado":    {"emoji": "🔴", "texto": "Cerrado",                   "color": 0xE74C3C},
+}
 
-# Almacena autoroles registrados  {role_id (int): nombre (str)}
-autoroles_registrados: dict = {}
+DESCRIPCIONES_ESTADO = {
+    "abierto":   "Un staff te atendera en breve. ⚡",
+    "pendiente": "💳 **Pago marcado como realizado.** Esperando verificacion del staff…",
+    "entregado": "✅ **Los Robux han sido entregados.** ¡Gracias por tu compra!",
+    "cerrado":   "🔴 Este ticket ha sido cerrado.",
+}
 
-
-# ──────────────────────────────────────────────
+# ============================================================
 #  UTILIDADES
-# ──────────────────────────────────────────────
+# ============================================================
 
 async def calcular_precio(robux: int, codigo_pais: str) -> Tuple:
-    """Retorna (precio_local, texto_formateado, usd).
-    Usa tasas de cambio en tiempo real; cae en estaticas si falla la API."""
     info = TASAS_CAMBIO.get(codigo_pais.upper())
     if not info:
         return None, None, None
-    usd = precio_usd_aproximado(robux)
-
-    # Intentar tasa live
+    usd   = precio_usd_aproximado(robux)
     rates = await obtener_tasas_live()
-    moneda = info["moneda"]
-    if rates and moneda in rates:
-        tasa = rates[moneda]
-    else:
-        tasa = info["tasa"]   # fallback estatico
-
+    tasa  = rates.get(info["moneda"], info["tasa"]) if rates else info["tasa"]
     local = usd * tasa
     texto = f"{info['simbolo']}{local:,.2f} {info['moneda']}"
     return local, texto, usd
@@ -151,6 +207,66 @@ def opciones_paises():
     ]
 
 
+def es_staff(member: discord.Member) -> bool:
+    if member.guild_permissions.manage_channels or member.guild_permissions.administrator:
+        return True
+    if STAFF_ROLE_ID:
+        staff_role = member.guild.get_role(STAFF_ROLE_ID)
+        if staff_role and staff_role in member.roles:
+            return True
+    return False
+
+
+def crear_embed_ticket(datos: dict) -> discord.Embed:
+    """Construye el embed del ticket segun su estado actual."""
+    estado_key  = datos.get("estado", "abierto")
+    estado_info = ESTADOS.get(estado_key, ESTADOS["abierto"])
+    info_pais   = TASAS_CAMBIO.get(datos.get("pais", ""), {})
+    numero      = datos.get("numero", 0)
+
+    embed = discord.Embed(
+        title=f"🎮 Ticket #{numero:04d} — {estado_info['emoji']} {estado_info['texto']}",
+        description=(
+            f"Ticket de <@{datos['autor_id']}>.\n"
+            f"{DESCRIPCIONES_ESTADO.get(estado_key, '')}"
+        ),
+        color=estado_info["color"],
+        timestamp=datetime.datetime.utcnow(),
+    )
+    embed.set_thumbnail(
+        url="https://upload.wikimedia.org/wikipedia/commons/thumb/"
+            "6/6e/Roblox_Logo_2022.svg/512px-Roblox_Logo_2022.svg.png"
+    )
+    embed.add_field(name="👤 Comprador",         value=f"<@{datos['autor_id']}>",   inline=True)
+    embed.add_field(
+        name="🌍 Pais",
+        value=f"{info_pais.get('nombre', '?')} ({info_pais.get('moneda', '?')})",
+        inline=True,
+    )
+    embed.add_field(name="🎲 Robux solicitados", value=f"**{datos['robux']:,} R$**",               inline=True)
+    embed.add_field(name="💵 Precio USD",        value=f"**${datos.get('precio_usd', 0):.2f} USD**", inline=True)
+    embed.add_field(name="💰 Precio local",      value=f"**{datos.get('precio_texto', '?')}**",     inline=True)
+    embed.add_field(name="💳 Metodo de pago",    value=datos.get("metodo_pago", "?"),               inline=True)
+    embed.add_field(name="🎮 Usuario Roblox",    value=datos.get("usuario_roblox", "?"),            inline=False)
+
+    if datos.get("notas"):
+        embed.add_field(name="📝 Notas", value=datos["notas"], inline=False)
+
+    embed.add_field(
+        name="📊 Estado",
+        value=f"{estado_info['emoji']} **{estado_info['texto']}**",
+        inline=False,
+    )
+
+    if estado_key == "pendiente" and datos.get("pagado_por"):
+        embed.add_field(name="💳 Pago marcado por", value=f"<@{datos['pagado_por']}>", inline=True)
+    if estado_key == "entregado" and datos.get("entregado_por"):
+        embed.add_field(name="📦 Entregado por",    value=f"<@{datos['entregado_por']}>", inline=True)
+
+    embed.set_footer(text=f"Ticket #{numero:04d}")
+    return embed
+
+
 # ──────────────────────────────────────────────
 #  MODAL — formulario de compra
 # ──────────────────────────────────────────────
@@ -159,16 +275,12 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
     pais = discord.ui.TextInput(
         label="Codigo de tu pais (ej: MX, AR, CO, ES…)",
         placeholder="MX",
-        min_length=2,
-        max_length=2,
-        required=True,
+        min_length=2, max_length=2, required=True,
     )
     cantidad = discord.ui.TextInput(
         label="¿Cuantos Robux quieres?",
         placeholder="1000, 2000, 3000, 5000, 7000, 10000…",
-        min_length=1,
-        max_length=6,
-        required=True,
+        min_length=1, max_length=6, required=True,
     )
     usuario_roblox = discord.ui.TextInput(
         label="Tu usuario de Roblox",
@@ -183,8 +295,7 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
     notas = discord.ui.TextInput(
         label="Notas adicionales (opcional)",
         style=discord.TextStyle.paragraph,
-        required=False,
-        max_length=300,
+        required=False, max_length=300,
     )
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -216,13 +327,30 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
             )
             return
 
+        # ── Limite de tickets por usuario ──
+        tickets_del_usuario = sum(
+            1 for t in tickets_activos.values()
+            if t.get("autor_id") == interaction.user.id
+            and t.get("estado") in ("abierto", "pendiente")
+        )
+        if tickets_del_usuario >= MAX_TICKETS_POR_USUARIO:
+            await interaction.response.send_message(
+                f"❌ Ya tienes **{tickets_del_usuario}** tickets abiertos. "
+                f"Cierra uno antes de abrir otro (max {MAX_TICKETS_POR_USUARIO}).",
+                ephemeral=True,
+            )
+            return
+
         precio_local, precio_texto, usd = await calcular_precio(robux, codigo)
         info_pais = TASAS_CAMBIO[codigo]
 
-        # ── Crear canal de ticket ──
-        guild    = interaction.guild
-        ticket_counter += 1
-        nombre_canal = f"ticket-{ticket_counter:04d}-{interaction.user.name.lower()[:10]}"
+        # ── Crear canal ──
+        guild = interaction.guild
+        async with ticket_lock:
+            ticket_counter += 1
+            numero = ticket_counter
+
+        nombre_canal = f"ticket-{numero:04d}-{interaction.user.name.lower()[:10]}"
 
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -233,8 +361,6 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
                 read_messages=True, send_messages=True, manage_channels=True
             ),
         }
-
-        # Agregar rol de staff si esta configurado
         if STAFF_ROLE_ID:
             staff_role = guild.get_role(STAFF_ROLE_ID)
             if staff_role:
@@ -243,144 +369,337 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
                 )
 
         categoria = guild.get_channel(CATEGORY_TICKETS_ID) if CATEGORY_TICKETS_ID else None
-        canal = await guild.create_text_channel(
-            nombre_canal,
-            overwrites=overwrites,
-            category=categoria,
-            topic=f"Ticket de {interaction.user} | {robux} Robux | {info_pais['nombre']}",
-        )
 
-        # Guardar en memoria
-        tickets_activos[canal.id] = {
-            "autor_id":     interaction.user.id,
-            "robux":        robux,
-            "pais":         codigo,
-            "precio_usd":   usd,
-            "precio_local": precio_local,
-            "precio_texto": precio_texto,
+        try:
+            canal = await guild.create_text_channel(
+                nombre_canal,
+                overwrites=overwrites,
+                category=categoria,
+                topic=f"Ticket de {interaction.user} | {robux} Robux | {info_pais['nombre']}",
+            )
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                "❌ No tengo permisos para crear canales. Verifica mis permisos.",
+                ephemeral=True,
+            )
+            return
+        except discord.HTTPException as e:
+            logger.error(f"Error creando canal de ticket: {e}")
+            await interaction.response.send_message(
+                f"❌ Error al crear el ticket: {e}", ephemeral=True
+            )
+            return
+
+        # ── Guardar datos ──
+        datos_ticket = {
+            "autor_id":       interaction.user.id,
+            "numero":         numero,
+            "robux":          robux,
+            "pais":           codigo,
+            "precio_usd":     usd,
+            "precio_local":   precio_local,
+            "precio_texto":   precio_texto,
             "usuario_roblox": self.usuario_roblox.value.strip(),
-            "metodo_pago":  self.metodo_pago.value.strip(),
-            "notas":        self.notas.value.strip(),
-            "abierto":      True,
-            "creado_en":    datetime.datetime.utcnow(),
+            "metodo_pago":    self.metodo_pago.value.strip(),
+            "notas":          self.notas.value.strip() if self.notas.value else "",
+            "estado":         "abierto",
+            "creado_en":      datetime.datetime.utcnow().isoformat(),
+            "pagado_por":     None,
+            "entregado_por":  None,
         }
+        tickets_activos[canal.id] = datos_ticket
+        guardar_datos()
 
-        # ── Embed dentro del canal ──
-        embed = discord.Embed(
-            title="🎮 Nuevo Ticket de Compra de Robux",
-            description=f"Hola {interaction.user.mention}, tu solicitud fue registrada.\n"
-                        f"Un staff te atendera en breve. ⚡",
-            color=0x00BFFF,
-            timestamp=datetime.datetime.utcnow(),
-        )
-        embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Roblox_Logo_2022.svg/512px-Roblox_Logo_2022.svg.png")
-        embed.add_field(name="👤 Comprador",       value=interaction.user.mention,                inline=True)
-        embed.add_field(name="🌍 Pais",            value=f"{info_pais['nombre']} ({info_pais['moneda']})", inline=True)
-        embed.add_field(name="🎲 Robux solicitados", value=f"**{robux:,} R$**",                  inline=True)
-        embed.add_field(name="💵 Precio USD",        value=f"**${usd:.2f} USD**",                  inline=True)
-        embed.add_field(name="💰 Precio local",    value=f"**{precio_texto}**",                  inline=True)
-        embed.add_field(name="💳 Metodo de pago",  value=self.metodo_pago.value.strip(),         inline=True)
-        embed.add_field(name="🎮 Usuario Roblox",  value=self.usuario_roblox.value.strip(),      inline=False)
-        if self.notas.value.strip():
-            embed.add_field(name="📝 Notas",       value=self.notas.value.strip(),               inline=False)
-        embed.set_footer(text=f"Ticket #{ticket_counter:04d} • Tasa: 1 USD = {info_pais['tasa']} {info_pais['moneda']}")
+        # ── Embed + botones ──
+        embed = crear_embed_ticket(datos_ticket)
+        vista = VistaTicket()
 
-        vista_ticket = VistaTicket()
         await canal.send(
-            content=f"{interaction.user.mention} {'<@&' + str(STAFF_ROLE_ID) + '>' if STAFF_ROLE_ID else ''}",
+            content=(
+                f"{interaction.user.mention} "
+                f"{'<@&' + str(STAFF_ROLE_ID) + '>' if STAFF_ROLE_ID else ''}"
+            ),
             embed=embed,
-            view=vista_ticket,
+            view=vista,
         )
 
-        # Log
+        # ── Log ──
         if LOG_CHANNEL_ID:
-            log_canal = guild.get_channel(LOG_CHANNEL_ID)
-            if log_canal:
-                log_embed = discord.Embed(
+            log_ch = guild.get_channel(LOG_CHANNEL_ID)
+            if log_ch:
+                log_e = discord.Embed(
                     title="📋 Ticket creado",
-                    description=f"**Usuario:** {interaction.user}\n**Canal:** {canal.mention}\n"
-                                f"**Robux:** {robux:,} | **Precio:** {precio_texto}",
+                    description=(
+                        f"**Usuario:** {interaction.user}\n"
+                        f"**Canal:** {canal.mention}\n"
+                        f"**Robux:** {robux:,} | **Precio:** {precio_texto}"
+                    ),
                     color=0x2ECC71,
                     timestamp=datetime.datetime.utcnow(),
                 )
-                await log_canal.send(embed=log_embed)
+                await log_ch.send(embed=log_e)
 
         await interaction.response.send_message(
-            f"✅ Tu ticket fue creado: {canal.mention}",
-            ephemeral=True,
+            f"✅ Tu ticket fue creado: {canal.mention}", ephemeral=True
         )
 
 
 # ──────────────────────────────────────────────
-#  VISTA DENTRO DEL TICKET
+#  VISTA DENTRO DEL TICKET  (4 botones)
 # ──────────────────────────────────────────────
 
 class VistaTicket(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="✅ Marcar como pagado", style=discord.ButtonStyle.success, custom_id="ticket_pagado")
+    # ─── 1) MARCAR COMO PAGADO ───────────────────────────
+    @discord.ui.button(
+        label="💳 Marcar como pagado",
+        style=discord.ButtonStyle.primary,
+        custom_id="ticket_pagado",
+    )
     async def pagado(self, interaction: discord.Interaction, button: discord.ui.Button):
         datos = tickets_activos.get(interaction.channel_id)
         if not datos:
-            await interaction.response.send_message("❌ No encontre datos de este ticket.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ No encontre datos de este ticket.", ephemeral=True
+            )
             return
 
-        embed = discord.Embed(
-            title="✅ Pago confirmado",
-            description=f"El pago de **{datos['robux']:,} Robux** fue marcado como recibido.\n"
-                        f"Usuario Roblox: **{datos['usuario_roblox']}**\n"
-                        f"Los Robux seran enviados pronto. 🎮",
+        estado = datos.get("estado", "abierto")
+        if estado == "pendiente":
+            await interaction.response.send_message(
+                "⚠️ Este ticket ya esta marcado como **pendiente de verificacion**.",
+                ephemeral=True,
+            )
+            return
+        if estado == "entregado":
+            await interaction.response.send_message(
+                "⚠️ Los Robux ya fueron **entregados** en este ticket.",
+                ephemeral=True,
+            )
+            return
+        if estado == "cerrado":
+            await interaction.response.send_message(
+                "⚠️ Este ticket esta **cerrado**.", ephemeral=True
+            )
+            return
+
+        # ── Cambiar a PENDIENTE ──
+        datos["estado"]     = "pendiente"
+        datos["pagado_por"] = interaction.user.id
+        guardar_datos()
+
+        # Notificacion
+        notif = discord.Embed(
+            title="💳 Pago marcado como realizado",
+            description=(
+                f"{interaction.user.mention} ha marcado el pago como **realizado**.\n"
+                f"**{datos['robux']:,} R$** — {datos['precio_texto']}\n\n"
+                f"⏳ Esperando que un **staff** verifique y confirme la entrega…"
+            ),
+            color=0xF39C12,
+            timestamp=datetime.datetime.utcnow(),
+        )
+        staff_ping = f"<@&{STAFF_ROLE_ID}>" if STAFF_ROLE_ID else ""
+        await interaction.response.send_message(
+            content=staff_ping, embed=notif
+        )
+
+        # Reescribir embed original → PENDIENTE
+        try:
+            if interaction.message:
+                await interaction.message.edit(embed=crear_embed_ticket(datos))
+        except Exception as e:
+            logger.warning(f"Error editando embed del ticket: {e}")
+
+        # Log
+        if LOG_CHANNEL_ID:
+            log_ch = interaction.guild.get_channel(LOG_CHANNEL_ID)
+            if log_ch:
+                await log_ch.send(embed=discord.Embed(
+                    title="💳 Pago marcado",
+                    description=(
+                        f"**Canal:** {interaction.channel.mention}\n"
+                        f"**Marcado por:** {interaction.user}\n"
+                        f"**Robux:** {datos['robux']:,}"
+                    ),
+                    color=0xF39C12,
+                    timestamp=datetime.datetime.utcnow(),
+                ))
+
+    # ─── 2) CONFIRMAR ENTREGA  (solo staff) ─────────────
+    @discord.ui.button(
+        label="📦 Confirmar entrega",
+        style=discord.ButtonStyle.success,
+        custom_id="ticket_entrega",
+    )
+    async def confirmar_entrega(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not es_staff(interaction.user):
+            await interaction.response.send_message(
+                "❌ Solo el **staff** puede confirmar la entrega de Robux.",
+                ephemeral=True,
+            )
+            return
+
+        datos = tickets_activos.get(interaction.channel_id)
+        if not datos:
+            await interaction.response.send_message(
+                "❌ No encontre datos de este ticket.", ephemeral=True
+            )
+            return
+
+        estado = datos.get("estado", "abierto")
+        if estado == "abierto":
+            await interaction.response.send_message(
+                "⚠️ El comprador aun no ha marcado el pago. Estado: **Abierto**.",
+                ephemeral=True,
+            )
+            return
+        if estado == "entregado":
+            await interaction.response.send_message(
+                "⚠️ Los Robux ya fueron **entregados**.", ephemeral=True
+            )
+            return
+        if estado == "cerrado":
+            await interaction.response.send_message(
+                "⚠️ Este ticket esta **cerrado**.", ephemeral=True
+            )
+            return
+
+        # ── Cambiar a ENTREGADO ──
+        datos["estado"]        = "entregado"
+        datos["entregado_por"] = interaction.user.id
+        guardar_datos()
+
+        notif = discord.Embed(
+            title="✅ ¡Robux Entregados!",
+            description=(
+                f"**{datos['robux']:,} Robux** han sido enviados a "
+                f"**{datos['usuario_roblox']}**.\n"
+                f"Entregado por: {interaction.user.mention}\n\n"
+                f"¡Gracias por tu compra! 🎮"
+            ),
             color=0x2ECC71,
             timestamp=datetime.datetime.utcnow(),
         )
-        embed.set_footer(text=f"Confirmado por {interaction.user}")
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=notif)
 
-    @discord.ui.button(label="🔒 Cerrar ticket", style=discord.ButtonStyle.danger, custom_id="ticket_cerrar")
+        # Reescribir embed original → ENTREGADO
+        try:
+            if interaction.message:
+                await interaction.message.edit(embed=crear_embed_ticket(datos))
+        except Exception as e:
+            logger.warning(f"Error editando embed del ticket: {e}")
+
+        # Log
+        if LOG_CHANNEL_ID:
+            log_ch = interaction.guild.get_channel(LOG_CHANNEL_ID)
+            if log_ch:
+                await log_ch.send(embed=discord.Embed(
+                    title="✅ Robux entregados",
+                    description=(
+                        f"**Canal:** {interaction.channel.mention}\n"
+                        f"**Staff:** {interaction.user}\n"
+                        f"**Robux:** {datos['robux']:,}\n"
+                        f"**Roblox:** {datos['usuario_roblox']}"
+                    ),
+                    color=0x2ECC71,
+                    timestamp=datetime.datetime.utcnow(),
+                ))
+
+    # ─── 3) CERRAR TICKET ───────────────────────────────
+    @discord.ui.button(
+        label="🔒 Cerrar ticket",
+        style=discord.ButtonStyle.danger,
+        custom_id="ticket_cerrar",
+    )
     async def cerrar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        datos = tickets_activos.get(interaction.channel_id)
+
+        # Solo staff o autor
+        if datos:
+            es_autor = interaction.user.id == datos.get("autor_id")
+            if not es_autor and not es_staff(interaction.user):
+                await interaction.response.send_message(
+                    "❌ Solo el **staff** o el creador del ticket pueden cerrarlo.",
+                    ephemeral=True,
+                )
+                return
+
         await interaction.response.send_message(
-            "🔒 Cerrando ticket en **5 segundos**…", ephemeral=False
+            "🔒 Cerrando ticket en **5 segundos**…"
         )
 
-        if interaction.channel_id in tickets_activos:
-            tickets_activos[interaction.channel_id]["abierto"] = False
-
+        # Log
         if LOG_CHANNEL_ID:
-            log_canal = interaction.guild.get_channel(LOG_CHANNEL_ID)
-            if log_canal:
-                datos = tickets_activos.get(interaction.channel_id, {})
-                log_embed = discord.Embed(
+            log_ch = interaction.guild.get_channel(LOG_CHANNEL_ID)
+            if log_ch:
+                desc = (
+                    f"**Canal:** {interaction.channel.name}\n"
+                    f"**Cerrado por:** {interaction.user}"
+                )
+                if datos:
+                    desc += f"\n**Robux:** {datos.get('robux', 0):,}"
+                await log_ch.send(embed=discord.Embed(
                     title="🔒 Ticket cerrado",
-                    description=f"**Canal:** {interaction.channel.name}\n"
-                                f"**Cerrado por:** {interaction.user}\n"
-                                f"**Robux:** {datos.get('robux', '?'):,}",
+                    description=desc,
                     color=0xE74C3C,
                     timestamp=datetime.datetime.utcnow(),
-                )
-                await log_canal.send(embed=log_embed)
+                ))
 
         await asyncio.sleep(5)
-        try:
-            await interaction.channel.delete(reason=f"Ticket cerrado por {interaction.user}")
-        except discord.Forbidden:
-            await interaction.followup.send("❌ No tengo permisos para eliminar el canal.", ephemeral=True)
 
-    @discord.ui.button(label="📋 Ver resumen", style=discord.ButtonStyle.secondary, custom_id="ticket_resumen")
+        # Limpiar de memoria y disco
+        tickets_activos.pop(interaction.channel_id, None)
+        guardar_datos()
+
+        try:
+            await interaction.channel.delete(
+                reason=f"Ticket cerrado por {interaction.user}"
+            )
+        except discord.Forbidden:
+            await interaction.followup.send(
+                "❌ No tengo permisos para eliminar el canal.", ephemeral=True
+            )
+
+    # ─── 4) VER RESUMEN ─────────────────────────────────
+    @discord.ui.button(
+        label="📋 Ver resumen",
+        style=discord.ButtonStyle.secondary,
+        custom_id="ticket_resumen",
+    )
     async def resumen(self, interaction: discord.Interaction, button: discord.ui.Button):
         datos = tickets_activos.get(interaction.channel_id)
         if not datos:
-            await interaction.response.send_message("❌ No hay datos guardados para este ticket.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ No hay datos guardados para este ticket.", ephemeral=True
+            )
             return
-        info_pais = TASAS_CAMBIO.get(datos["pais"], {})
-        embed = discord.Embed(title="📋 Resumen del ticket", color=0x9B59B6)
-        embed.add_field(name="Robux",          value=f"{datos['robux']:,} R$",        inline=True)
-        embed.add_field(name="Pais",           value=info_pais.get("nombre", "?"),    inline=True)
-        embed.add_field(name="Precio USD",     value=f"${datos['precio_usd']:.2f}",   inline=True)
-        embed.add_field(name="Precio local",   value=datos["precio_texto"],           inline=True)
-        embed.add_field(name="Usuario Roblox", value=datos["usuario_roblox"],         inline=True)
-        embed.add_field(name="Metodo de pago", value=datos["metodo_pago"],            inline=True)
-        embed.add_field(name="Estado",         value="🟢 Abierto" if datos["abierto"] else "🔴 Cerrado", inline=True)
+
+        info_pais   = TASAS_CAMBIO.get(datos.get("pais", ""), {})
+        estado_info = ESTADOS.get(datos.get("estado", "abierto"), ESTADOS["abierto"])
+
+        embed = discord.Embed(
+            title="📋 Resumen del ticket",
+            color=estado_info["color"],
+        )
+        embed.add_field(name="Robux",          value=f"{datos['robux']:,} R$",               inline=True)
+        embed.add_field(name="Pais",           value=info_pais.get("nombre", "?"),           inline=True)
+        embed.add_field(name="Precio USD",     value=f"${datos.get('precio_usd', 0):.2f}",  inline=True)
+        embed.add_field(name="Precio local",   value=datos.get("precio_texto", "?"),         inline=True)
+        embed.add_field(name="Usuario Roblox", value=datos.get("usuario_roblox", "?"),       inline=True)
+        embed.add_field(name="Metodo de pago", value=datos.get("metodo_pago", "?"),          inline=True)
+        embed.add_field(
+            name="Estado",
+            value=f"{estado_info['emoji']} {estado_info['texto']}",
+            inline=True,
+        )
+        if datos.get("pagado_por"):
+            embed.add_field(name="Pago marcado por", value=f"<@{datos['pagado_por']}>", inline=True)
+        if datos.get("entregado_por"):
+            embed.add_field(name="Entregado por",    value=f"<@{datos['entregado_por']}>", inline=True)
+
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
@@ -408,36 +727,44 @@ class VistaPanelPrincipal(discord.ui.View):
         emoji="📊",
     )
     async def ver_precios(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = discord.Embed(
-            title="📊 Tabla de precios de Robux",
-            description="Precios **oficiales** directos del vendedor:\n\u200b",
-            color=0xF1C40F,
-        )
-        # Obtener tasas live
-        rates = await obtener_tasas_live()
+        rates  = await obtener_tasas_live()
         fuente = "🌐 Tasas en tiempo real" if rates else "📌 Tasas estaticas (fallback)"
 
-        # Tabla oficial USD (vendedor + extra hasta 50k)
-        tabla_usd = ""
         cantidades_mostrar = list(PRECIOS_ROBUX.keys()) + [40_000, 50_000]
-        for r in cantidades_mostrar:
-            p = precio_usd_aproximado(r)
-            badge = "✅" if r in PRECIOS_ROBUX else "📐"
-            tabla_usd += f"{badge} `{r:>6,} R$` → **${p:.2f}**\n"
-        embed.add_field(name="💵 Precios en USD", value=tabla_usd, inline=True)
 
-        # Tablas en monedas populares con tasas live
+        # Embed USD
+        embed_usd = discord.Embed(
+            title="📊 Precios de Robux — USD",
+            description=f"*{fuente}*\n\u200b",
+            color=0xF1C40F,
+        )
+        col_usd = ""
+        for r in cantidades_mostrar:
+            p     = precio_usd_aproximado(r)
+            badge = "✅" if r in PRECIOS_ROBUX else "📐"
+            col_usd += f"{badge} `{r:>6,} R$` → **${p:.2f}**\n"
+        embed_usd.add_field(name="💵 Precios en USD", value=col_usd, inline=False)
+
+        # Embed monedas locales
+        embed_local = discord.Embed(
+            title="🌍 Precios en moneda local",
+            color=0x3498DB,
+        )
         for pais_code in ["MX", "AR", "CO", "CL", "ES"]:
             info_p = TASAS_CAMBIO[pais_code]
             moneda = info_p["moneda"]
-            tasa = rates.get(moneda, info_p["tasa"]) if rates else info_p["tasa"]
+            tasa   = rates.get(moneda, info_p["tasa"]) if rates else info_p["tasa"]
             col = ""
             for r in cantidades_mostrar:
-                p_usd = precio_usd_aproximado(r)
-                local = p_usd * tasa
+                local = precio_usd_aproximado(r) * tasa
                 col += f"`{r:>6,}` → {info_p['simbolo']}{local:,.0f}\n"
-            embed.add_field(name=f"🌍 {info_p['nombre']} ({moneda})", value=col, inline=True)
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+            embed_local.add_field(
+                name=f"{info_p['nombre']} ({moneda})", value=col, inline=True
+            )
+
+        await interaction.response.send_message(
+            embeds=[embed_usd, embed_local], ephemeral=True
+        )
 
     @discord.ui.button(
         label="💳 Metodos de pago",
@@ -471,18 +798,27 @@ class VistaPanelPrincipal(discord.ui.View):
         emoji="📖",
     )
     async def ayuda(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = discord.Embed(
-            title="❓ Preguntas frecuentes",
-            color=0x1ABC9C,
+        embed = discord.Embed(title="❓ Preguntas frecuentes", color=0x1ABC9C)
+        embed.add_field(
+            name="¿Como compro Robux?",
+            value="Haz clic en **🎮 Comprar Robux**, completa el formulario y espera a un staff.",
+            inline=False,
         )
-        embed.add_field(name="¿Como compro Robux?",
-                        value="Haz clic en **🎮 Comprar Robux**, completa el formulario y espera a un staff.", inline=False)
-        embed.add_field(name="¿Cuanto tiempo tarda?",
-                        value="Normalmente entre 5 y 30 minutos segun disponibilidad del staff.", inline=False)
-        embed.add_field(name="¿Que metodos de pago aceptan?",
-                        value="Crypto, CashApp, PayPal, Nequi, Bancolombia, OXXO, Transferencia, Yape, MercadoPago y mas.", inline=False)
-        embed.add_field(name="¿Es seguro?",
-                        value="Si, nuestro staff verificado gestiona cada transaccion manualmente.", inline=False)
+        embed.add_field(
+            name="¿Cuanto tiempo tarda?",
+            value="Normalmente entre 5 y 30 minutos segun disponibilidad del staff.",
+            inline=False,
+        )
+        embed.add_field(
+            name="¿Que metodos de pago aceptan?",
+            value="Crypto, CashApp, PayPal, Nequi, Bancolombia, OXXO, Transferencia, Yape, MercadoPago y mas.",
+            inline=False,
+        )
+        embed.add_field(
+            name="¿Es seguro?",
+            value="Si, nuestro staff verificado gestiona cada transaccion manualmente.",
+            inline=False,
+        )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
@@ -494,15 +830,14 @@ class ModalAgregarRol(discord.ui.Modal, title="➕ Agregar Autorol"):
     role_id_input = discord.ui.TextInput(
         label="ID del rol",
         placeholder="Ej: 123456789012345678",
-        min_length=15,
-        max_length=20,
-        required=True,
+        min_length=15, max_length=20, required=True,
     )
 
     async def on_submit(self, interaction: discord.Interaction):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
-                "❌ Solo los administradores pueden agregar autoroles.", ephemeral=True
+                "❌ Solo los administradores pueden agregar autoroles.",
+                ephemeral=True,
             )
             return
 
@@ -517,19 +852,23 @@ class ModalAgregarRol(discord.ui.Modal, title="➕ Agregar Autorol"):
         role = interaction.guild.get_role(role_id)
         if not role:
             await interaction.response.send_message(
-                f"❌ No encontre ningun rol con la ID `{role_id}` en este servidor.", ephemeral=True
+                f"❌ No encontre ningun rol con la ID `{role_id}` en este servidor.",
+                ephemeral=True,
             )
             return
 
         if role_id in autoroles_registrados:
             await interaction.response.send_message(
-                f"⚠️ El rol **{role.name}** ya esta registrado como autorol.", ephemeral=True
+                f"⚠️ El rol **{role.name}** ya esta registrado como autorol.",
+                ephemeral=True,
             )
             return
 
         autoroles_registrados[role_id] = role.name
+        guardar_datos()
         await interaction.response.send_message(
-            f"✅ Rol **{role.name}** agregado a los autoroles correctamente.", ephemeral=True
+            f"✅ Rol **{role.name}** agregado a los autoroles correctamente.",
+            ephemeral=True,
         )
 
 
@@ -549,27 +888,29 @@ class VistaAutorolSelect(discord.ui.View):
 
     async def select_callback(self, interaction: discord.Interaction):
         role_id = int(interaction.data["values"][0])
-        role = interaction.guild.get_role(role_id)
+        role    = interaction.guild.get_role(role_id)
         if not role:
             await interaction.response.send_message(
-                "❌ No se encontro el rol. Puede que haya sido eliminado.", ephemeral=True
+                "❌ No se encontro el rol. Puede que haya sido eliminado.",
+                ephemeral=True,
             )
             return
 
         try:
             if role in interaction.user.roles:
-                await interaction.user.remove_roles(role, reason="Autorol quitado por el usuario")
+                await interaction.user.remove_roles(role, reason="Autorol quitado")
                 await interaction.response.send_message(
                     f"➖ Se te quito el rol **{role.name}**.", ephemeral=True
                 )
             else:
-                await interaction.user.add_roles(role, reason="Autorol asignado por el usuario")
+                await interaction.user.add_roles(role, reason="Autorol asignado")
                 await interaction.response.send_message(
                     f"✅ Se te asigno el rol **{role.name}**.", ephemeral=True
                 )
         except discord.Forbidden:
             await interaction.response.send_message(
-                "❌ No tengo permisos para asignar ese rol. Asegurate de que mi rol este por encima del rol a asignar.",
+                "❌ No tengo permisos para asignar ese rol. "
+                "Asegurate de que mi rol este por encima.",
                 ephemeral=True,
             )
 
@@ -586,7 +927,8 @@ class VistaPanelAutoroles(discord.ui.View):
     async def agregar_rol(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
-                "❌ Solo los administradores pueden agregar autoroles.", ephemeral=True
+                "❌ Solo los administradores pueden agregar autoroles.",
+                ephemeral=True,
             )
             return
         await interaction.response.send_modal(ModalAgregarRol())
@@ -599,25 +941,23 @@ class VistaPanelAutoroles(discord.ui.View):
     async def obtener_autorol(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not autoroles_registrados:
             await interaction.response.send_message(
-                "❌ No hay autoroles configurados aun. Un administrador debe agregar roles primero.",
+                "❌ No hay autoroles configurados aun. Un admin debe agregar roles primero.",
                 ephemeral=True,
             )
             return
 
-        # Filtrar roles que aun existen en el servidor
         roles_validos = [
             (rid, nombre)
             for rid, nombre in autoroles_registrados.items()
             if interaction.guild.get_role(rid) is not None
         ]
-
         if not roles_validos:
             await interaction.response.send_message(
-                "❌ Los roles registrados ya no existen en el servidor.", ephemeral=True
+                "❌ Los roles registrados ya no existen en el servidor.",
+                ephemeral=True,
             )
             return
 
-        # Discord permite maximo 25 opciones en un select
         roles_validos = roles_validos[:25]
 
         embed = discord.Embed(
@@ -626,7 +966,7 @@ class VistaPanelAutoroles(discord.ui.View):
             color=0x9B59B6,
         )
         for rid, nombre in roles_validos:
-            role = interaction.guild.get_role(rid)
+            role  = interaction.guild.get_role(rid)
             tiene = "✅" if role in interaction.user.roles else "➖"
             embed.add_field(name=f"{tiene} {nombre}", value=f"<@&{rid}>", inline=True)
 
@@ -634,25 +974,15 @@ class VistaPanelAutoroles(discord.ui.View):
         await interaction.response.send_message(embed=embed, view=vista, ephemeral=True)
 
 
-@tree.command(name="panel2", description="🛡️ Envia el panel de autoroles", guild=discord.Object(id=GUILD_ID))
-@app_commands.checks.has_permissions(administrator=True)
-async def cmd_panel2(interaction: discord.Interaction):
-    embed = discord.Embed(
-        title="Panel de Autoroles",
-        description=(
-            "Aqui puedes gestionar los **autoroles** del servidor.\n\n"
-            "**Agregar rol** — Registra un rol por su ID *(solo admins)*\n"
-            "**Obtener autorol** — Elige un rol para asignartelo o quitartelo\n"
-        ),
-        color=0x9B59B6,
-    )
-    await interaction.channel.send(embed=embed, view=VistaPanelAutoroles())
-    await interaction.response.send_message("✅ Panel de autoroles enviado.", ephemeral=True)
+# ──────────────────────────────────────────────
+#  COMANDOS SLASH
+# ──────────────────────────────────────────────
 
-
-
-
-@tree.command(name="panel", description="📌 Envia el panel principal de compra de Robux", guild=discord.Object(id=GUILD_ID))
+@tree.command(
+    name="panel",
+    description="📌 Envia el panel principal de compra de Robux",
+    guild=discord.Object(id=GUILD_ID),
+)
 @app_commands.checks.has_permissions(administrator=True)
 async def cmd_panel(interaction: discord.Interaction):
     embed = discord.Embed(
@@ -665,117 +995,211 @@ async def cmd_panel(interaction: discord.Interaction):
         ),
         color=0x00BFFF,
     )
-    embed.set_image(url="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Roblox_Logo_2022.svg/512px-Roblox_Logo_2022.svg.png")
+    embed.set_image(
+        url="https://upload.wikimedia.org/wikipedia/commons/thumb/"
+            "6/6e/Roblox_Logo_2022.svg/512px-Roblox_Logo_2022.svg.png"
+    )
     await interaction.channel.send(embed=embed, view=VistaPanelPrincipal())
     await interaction.response.send_message("✅ Panel enviado.", ephemeral=True)
 
 
-@tree.command(name="precio", description="💰 Calcula el precio de Robux en tu moneda local", guild=discord.Object(id=GUILD_ID))
-@app_commands.describe(robux="Cantidad de Robux", pais="Codigo de tu pais (MX, AR, CO…)")
+@tree.command(
+    name="panel2",
+    description="🛡️ Envia el panel de autoroles",
+    guild=discord.Object(id=GUILD_ID),
+)
+@app_commands.checks.has_permissions(administrator=True)
+async def cmd_panel2(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="Panel de Autoroles",
+        description=(
+            "Aqui puedes gestionar los **autoroles** del servidor.\n\n"
+            "**Agregar rol** — Registra un rol por su ID *(solo admins)*\n"
+            "**Obtener autorol** — Elige un rol para asignartelo o quitartelo\n"
+        ),
+        color=0x9B59B6,
+    )
+    await interaction.channel.send(embed=embed, view=VistaPanelAutoroles())
+    await interaction.response.send_message(
+        "✅ Panel de autoroles enviado.", ephemeral=True
+    )
+
+
+@tree.command(
+    name="precio",
+    description="💰 Calcula el precio de Robux en tu moneda local",
+    guild=discord.Object(id=GUILD_ID),
+)
+@app_commands.describe(robux="Cantidad de Robux", pais="Codigo de tu pais")
+@app_commands.choices(pais=opciones_paises())
 async def cmd_precio(interaction: discord.Interaction, robux: int, pais: str):
     codigo = pais.strip().upper()
     if codigo not in TASAS_CAMBIO:
         await interaction.response.send_message(
-            f"❌ Codigo **{codigo}** no reconocido. Usa alguno de: {', '.join(TASAS_CAMBIO.keys())}",
+            f"❌ Codigo **{codigo}** no reconocido. "
+            f"Usa alguno de: {', '.join(TASAS_CAMBIO.keys())}",
             ephemeral=True,
         )
         return
     if robux <= 0 or robux > 50_000:
-        await interaction.response.send_message("❌ La cantidad debe ser entre 1 y 50,000 Robux.", ephemeral=True)
+        await interaction.response.send_message(
+            "❌ La cantidad debe ser entre 1 y 50,000 Robux.", ephemeral=True
+        )
         return
 
     info = TASAS_CAMBIO[codigo]
     precio_local, precio_texto, usd = await calcular_precio(robux, codigo)
 
-    rates = await obtener_tasas_live()
+    rates       = await obtener_tasas_live()
     moneda_code = info["moneda"]
-    tasa_usada = rates.get(moneda_code, info["tasa"]) if rates else info["tasa"]
-    fuente_tasa = "🌐 Tasa en tiempo real" if (rates and moneda_code in rates) else "📌 Tasa estatica (fallback)"
+    tasa_usada  = rates.get(moneda_code, info["tasa"]) if rates else info["tasa"]
+    fuente_tasa = (
+        "🌐 Tasa en tiempo real"
+        if (rates and moneda_code in rates)
+        else "📌 Tasa estatica (fallback)"
+    )
+
     embed = discord.Embed(title="💰 Calculadora de Robux", color=0xF39C12)
-    embed.add_field(name="🎲 Robux",        value=f"**{robux:,} R$**",              inline=True)
-    embed.add_field(name="🌍 Pais",         value=info["nombre"],                   inline=True)
-    embed.add_field(name="💵 Precio USD",   value=f"**${usd:.2f}**",               inline=True)
-    embed.add_field(name="💰 Precio local", value=f"**{precio_texto}**",            inline=True)
-    embed.add_field(name="📈 Tasa usada",   value=f"1 USD = {tasa_usada:,.4f} {moneda_code}\n*{fuente_tasa}*", inline=True)
+    embed.add_field(name="🎲 Robux",        value=f"**{robux:,} R$**",   inline=True)
+    embed.add_field(name="🌍 Pais",         value=info["nombre"],        inline=True)
+    embed.add_field(name="💵 Precio USD",   value=f"**${usd:.2f}**",    inline=True)
+    embed.add_field(name="💰 Precio local", value=f"**{precio_texto}**", inline=True)
+    embed.add_field(
+        name="📈 Tasa usada",
+        value=f"1 USD = {tasa_usada:,.4f} {moneda_code}\n*{fuente_tasa}*",
+        inline=True,
+    )
     embed.set_footer(text="💡 $0.005 USD por Robux • FX actualizado cada hora")
     await interaction.response.send_message(embed=embed)
 
 
-@tree.command(name="tickets", description="📋 Lista los tickets activos (solo staff)", guild=discord.Object(id=GUILD_ID))
+@tree.command(
+    name="tickets",
+    description="📋 Lista los tickets activos (solo staff)",
+    guild=discord.Object(id=GUILD_ID),
+)
 @app_commands.checks.has_permissions(manage_channels=True)
 async def cmd_tickets(interaction: discord.Interaction):
-    activos = {k: v for k, v in tickets_activos.items() if v.get("abierto")}
+    activos = {
+        k: v for k, v in tickets_activos.items()
+        if v.get("estado") in ("abierto", "pendiente")
+    }
     if not activos:
-        await interaction.response.send_message("No hay tickets activos.", ephemeral=True)
+        await interaction.response.send_message(
+            "No hay tickets activos.", ephemeral=True
+        )
         return
-    embed = discord.Embed(title=f"📋 Tickets activos: {len(activos)}", color=0x3498DB)
+
+    embed = discord.Embed(
+        title=f"📋 Tickets activos: {len(activos)}", color=0x3498DB
+    )
     for canal_id, datos in list(activos.items())[:10]:
-        canal = interaction.guild.get_channel(canal_id)
+        canal        = interaction.guild.get_channel(canal_id)
         nombre_canal = canal.mention if canal else f"#{canal_id}"
+        estado_info  = ESTADOS.get(datos.get("estado", "abierto"), ESTADOS["abierto"])
         embed.add_field(
-            name=nombre_canal,
-            value=f"<@{datos['autor_id']}> | {datos['robux']:,} R$ | {datos['precio_texto']}",
+            name=f"{estado_info['emoji']} {nombre_canal}",
+            value=(
+                f"<@{datos['autor_id']}> | {datos['robux']:,} R$ | "
+                f"{datos.get('precio_texto', '?')} | **{estado_info['texto']}**"
+            ),
             inline=False,
         )
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-@tree.command(name="cerrar", description="🔒 Cierra el ticket actual", guild=discord.Object(id=GUILD_ID))
+@tree.command(
+    name="cerrar",
+    description="🔒 Cierra el ticket actual",
+    guild=discord.Object(id=GUILD_ID),
+)
 @app_commands.checks.has_permissions(manage_channels=True)
 async def cmd_cerrar(interaction: discord.Interaction):
     if interaction.channel_id not in tickets_activos:
-        await interaction.response.send_message("❌ Este canal no es un ticket.", ephemeral=True)
+        await interaction.response.send_message(
+            "❌ Este canal no es un ticket.", ephemeral=True
+        )
         return
+
     await interaction.response.send_message("🔒 Cerrando en 5 segundos…")
-    tickets_activos[interaction.channel_id]["abierto"] = False
+
+    # Log
+    datos = tickets_activos.get(interaction.channel_id, {})
+    if LOG_CHANNEL_ID:
+        log_ch = interaction.guild.get_channel(LOG_CHANNEL_ID)
+        if log_ch:
+            desc = (
+                f"**Canal:** {interaction.channel.name}\n"
+                f"**Cerrado por:** {interaction.user}"
+            )
+            if datos:
+                desc += f"\n**Robux:** {datos.get('robux', 0):,}"
+            await log_ch.send(embed=discord.Embed(
+                title="🔒 Ticket cerrado",
+                description=desc,
+                color=0xE74C3C,
+                timestamp=datetime.datetime.utcnow(),
+            ))
+
     await asyncio.sleep(5)
-    await interaction.channel.delete(reason=f"Cerrado por {interaction.user}")
+    tickets_activos.pop(interaction.channel_id, None)
+    guardar_datos()
+    try:
+        await interaction.channel.delete(
+            reason=f"Cerrado por {interaction.user}"
+        )
+    except discord.Forbidden:
+        await interaction.followup.send(
+            "❌ No tengo permisos para eliminar el canal.", ephemeral=True
+        )
 
 
-@tree.command(name="send", description="📊 Envia la tabla de precios de Robux al canal (solo staff)", guild=discord.Object(id=GUILD_ID))
+@tree.command(
+    name="send",
+    description="📊 Envia la tabla de precios de Robux al canal (solo staff)",
+    guild=discord.Object(id=GUILD_ID),
+)
 @app_commands.checks.has_permissions(administrator=True)
 async def cmd_send(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
 
-    rates = await obtener_tasas_live()
+    rates  = await obtener_tasas_live()
     fuente = "🌐 Tasas en tiempo real" if rates else "📌 Tasas estaticas (fallback)"
 
-    # Solo cantidades de la tabla + 40k y 50k — todos con ✅
     cantidades_mostrar = list(PRECIOS_ROBUX.keys()) + [40_000, 50_000]
-    # Agregar 40k y 50k al dict para que el icon sea ✅
-    precios_ext = dict(PRECIOS_ROBUX)
-    precios_ext[40_000] = precio_usd_aproximado(40_000)
-    precios_ext[50_000] = precio_usd_aproximado(50_000)
 
-    # ── Embed principal ──
-    embed = discord.Embed(
+    # ── Embed 1: USD ──
+    embed_usd = discord.Embed(
         title="📊 Tabla de precios de Robux",
-        description="Precios **oficiales** directos del vendedor:\n\u200b",
+        description=f"Precios **oficiales** directos del vendedor:\n*{fuente}*\n\u200b",
         color=0x00BFFF,
     )
-
-    # Columna USD — todos con ✅
     col_usd = ""
     for r in cantidades_mostrar:
         p = precio_usd_aproximado(r)
-        col_usd += f"✅ `{r:>6,} R$` -> **${p:.2f}**\n"
-    embed.add_field(name="💵 Precios en USD", value=col_usd, inline=True)
+        col_usd += f"✅ `{r:>6,} R$` → **${p:.2f}**\n"
+    embed_usd.add_field(name="💵 Precios en USD", value=col_usd, inline=False)
 
-    # Columnas por pais — todos con ✅
-    paises_tabla = ["MX", "AR", "CO", "CL", "ES"]
-    for pais_code in paises_tabla:
+    # ── Embed 2: Monedas locales ──
+    embed_local = discord.Embed(
+        title="🌍 Precios en moneda local",
+        color=0xF1C40F,
+    )
+    for pais_code in ["MX", "AR", "CO", "CL", "ES"]:
         info_p = TASAS_CAMBIO[pais_code]
-        moneda  = info_p["moneda"]
-        tasa    = rates.get(moneda, info_p["tasa"]) if rates else info_p["tasa"]
+        moneda = info_p["moneda"]
+        tasa   = rates.get(moneda, info_p["tasa"]) if rates else info_p["tasa"]
         col = ""
         for r in cantidades_mostrar:
-            p_usd = precio_usd_aproximado(r)
-            local = p_usd * tasa
-            col += f"`{r:>6,}` -> {info_p['simbolo']}{local:,.0f}\n"
-        embed.add_field(name=f"🌍 {info_p['nombre']} ({moneda})", value=col, inline=True)
+            local = precio_usd_aproximado(r) * tasa
+            col += f"`{r:>6,}` → {info_p['simbolo']}{local:,.0f}\n"
+        embed_local.add_field(
+            name=f"🌍 {info_p['nombre']} ({moneda})", value=col, inline=True
+        )
 
-    await interaction.channel.send(embed=embed)
+    await interaction.channel.send(embeds=[embed_usd, embed_local])
     await interaction.followup.send("✅ Tabla enviada.", ephemeral=True)
+
 
 # ──────────────────────────────────────────────
 #  EVENTOS
@@ -783,28 +1207,33 @@ async def cmd_send(interaction: discord.Interaction):
 
 @bot.event
 async def on_ready():
-    if not BOT_TOKEN or GUILD_ID == 0:
-        return
+    cargar_datos()
 
     bot.add_view(VistaPanelPrincipal())
     bot.add_view(VistaTicket())
     bot.add_view(VistaPanelAutoroles())
 
     try:
-        await tree.sync(guild=discord.Object(id=GUILD_ID))
-    except Exception:
-        pass
+        synced = await tree.sync(guild=discord.Object(id=GUILD_ID))
+        logger.info(f"✅ Bot listo: {bot.user} | {len(synced)} comandos sincronizados")
+    except Exception as e:
+        logger.warning(f"⚠️ Error sincronizando comandos: {e}")
 
     try:
         await obtener_tasas_live()
-    except Exception:
-        pass
-
+    except Exception as e:
+        logger.warning(f"⚠️ No se pudieron cargar tasas live: {e}")
 
 
 @bot.event
-async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    msg = "❌ No tienes permisos para usar este comando." if isinstance(error, app_commands.MissingPermissions) else f"❌ Error: {error}"
+async def on_app_command_error(
+    interaction: discord.Interaction, error: app_commands.AppCommandError
+):
+    if isinstance(error, app_commands.MissingPermissions):
+        msg = "❌ No tienes permisos para usar este comando."
+    else:
+        msg = f"❌ Error: {error}"
+        logger.error(f"Error en comando: {error}")
     try:
         if interaction.response.is_done():
             await interaction.followup.send(msg, ephemeral=True)
@@ -815,12 +1244,16 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 
 
 # ──────────────────────────────────────────────
+#  ARRANQUE
+# ──────────────────────────────────────────────
 keep_alive()
 
 if not BOT_TOKEN:
+    logger.critical("❌ BOT_TOKEN no configurado")
     exit(1)
 
 if GUILD_ID == 0:
+    logger.critical("❌ GUILD_ID no configurado")
     exit(1)
 
 bot.run(BOT_TOKEN, log_handler=None)
