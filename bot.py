@@ -267,6 +267,54 @@ def crear_embed_ticket(datos: dict) -> discord.Embed:
     return embed
 
 
+# ──────────────────────────────────────────────────────────────
+#  HELPER — construir embed de tabla de precios (un solo embed)
+# ──────────────────────────────────────────────────────────────
+
+async def construir_embed_tabla(titulo: str, descripcion: str, color: int) -> discord.Embed:
+    """
+    Devuelve UN solo embed con la columna USD y las columnas de cada pais,
+    todos como fields inline para que Discord los muestre en columnas.
+    Discord agrupa de 3 en 3, por lo que USD + 5 paises = 2 filas de 3.
+    """
+    rates  = await obtener_tasas_live()
+    fuente = "🌐 Tasas en tiempo real" if rates else "📌 Tasas estaticas (fallback)"
+
+    cantidades = list(PRECIOS_ROBUX.keys()) + [40_000, 50_000]
+
+    embed = discord.Embed(
+        title=titulo,
+        description=f"{descripcion}\n*{fuente}*\n\u200b",
+        color=color,
+    )
+
+    # ── Columna 1: USD ──
+    col_usd = ""
+    for r in cantidades:
+        p = precio_usd_aproximado(r)
+        col_usd += f"✅ `{r:>6,}` → **${p:.2f}**\n"
+    embed.add_field(name="💵 USD", value=col_usd, inline=True)
+
+    # ── Columnas 2-6: monedas locales ──
+    paises_mostrar = ["MX", "AR", "CO", "CL", "ES"]
+    for codigo in paises_mostrar:
+        info_p = TASAS_CAMBIO[codigo]
+        moneda = info_p["moneda"]
+        tasa   = rates.get(moneda, info_p["tasa"]) if rates else info_p["tasa"]
+        col = ""
+        for r in cantidades:
+            local = precio_usd_aproximado(r) * tasa
+            col += f"`{r:>6,}` → {info_p['simbolo']}{local:,.0f}\n"
+        embed.add_field(
+            name=f"🌍 {info_p['nombre']} ({moneda})",
+            value=col,
+            inline=True,
+        )
+
+    embed.set_footer(text="💡 $0.005 USD por Robux • FX actualizado cada hora")
+    return embed
+
+
 # ──────────────────────────────────────────────
 #  MODAL — formulario de compra
 # ──────────────────────────────────────────────
@@ -490,7 +538,6 @@ class VistaTicket(discord.ui.View):
         datos["pagado_por"] = interaction.user.id
         guardar_datos()
 
-        # Notificacion
         notif = discord.Embed(
             title="💳 Pago marcado como realizado",
             description=(
@@ -506,14 +553,12 @@ class VistaTicket(discord.ui.View):
             content=staff_ping, embed=notif
         )
 
-        # Reescribir embed original → PENDIENTE
         try:
             if interaction.message:
                 await interaction.message.edit(embed=crear_embed_ticket(datos))
         except Exception as e:
             logger.warning(f"Error editando embed del ticket: {e}")
 
-        # Log
         if LOG_CHANNEL_ID:
             log_ch = interaction.guild.get_channel(LOG_CHANNEL_ID)
             if log_ch:
@@ -567,7 +612,6 @@ class VistaTicket(discord.ui.View):
             )
             return
 
-        # ── Cambiar a ENTREGADO ──
         datos["estado"]        = "entregado"
         datos["entregado_por"] = interaction.user.id
         guardar_datos()
@@ -585,14 +629,12 @@ class VistaTicket(discord.ui.View):
         )
         await interaction.response.send_message(embed=notif)
 
-        # Reescribir embed original → ENTREGADO
         try:
             if interaction.message:
                 await interaction.message.edit(embed=crear_embed_ticket(datos))
         except Exception as e:
             logger.warning(f"Error editando embed del ticket: {e}")
 
-        # Log
         if LOG_CHANNEL_ID:
             log_ch = interaction.guild.get_channel(LOG_CHANNEL_ID)
             if log_ch:
@@ -617,7 +659,6 @@ class VistaTicket(discord.ui.View):
     async def cerrar(self, interaction: discord.Interaction, button: discord.ui.Button):
         datos = tickets_activos.get(interaction.channel_id)
 
-        # Solo staff o autor
         if datos:
             es_autor = interaction.user.id == datos.get("autor_id")
             if not es_autor and not es_staff(interaction.user):
@@ -631,7 +672,6 @@ class VistaTicket(discord.ui.View):
             "🔒 Cerrando ticket en **5 segundos**…"
         )
 
-        # Log
         if LOG_CHANNEL_ID:
             log_ch = interaction.guild.get_channel(LOG_CHANNEL_ID)
             if log_ch:
@@ -650,7 +690,6 @@ class VistaTicket(discord.ui.View):
 
         await asyncio.sleep(5)
 
-        # Limpiar de memoria y disco
         tickets_activos.pop(interaction.channel_id, None)
         guardar_datos()
 
@@ -727,44 +766,13 @@ class VistaPanelPrincipal(discord.ui.View):
         emoji="📊",
     )
     async def ver_precios(self, interaction: discord.Interaction, button: discord.ui.Button):
-        rates  = await obtener_tasas_live()
-        fuente = "🌐 Tasas en tiempo real" if rates else "📌 Tasas estaticas (fallback)"
-
-        cantidades_mostrar = list(PRECIOS_ROBUX.keys()) + [40_000, 50_000]
-
-        # Embed USD
-        embed_usd = discord.Embed(
-            title="📊 Precios de Robux — USD",
-            description=f"*{fuente}*\n\u200b",
+        # ── Un solo embed con USD + monedas locales ──
+        embed = await construir_embed_tabla(
+            titulo="📊 Precios de Robux",
+            descripcion="Precios **oficiales** directos del vendedor:",
             color=0xF1C40F,
         )
-        col_usd = ""
-        for r in cantidades_mostrar:
-            p     = precio_usd_aproximado(r)
-            badge = "✅" if r in PRECIOS_ROBUX else "📐"
-            col_usd += f"{badge} `{r:>6,} R$` → **${p:.2f}**\n"
-        embed_usd.add_field(name="💵 Precios en USD", value=col_usd, inline=False)
-
-        # Embed monedas locales
-        embed_local = discord.Embed(
-            title="🌍 Precios en moneda local",
-            color=0x3498DB,
-        )
-        for pais_code in ["MX", "AR", "CO", "CL", "ES"]:
-            info_p = TASAS_CAMBIO[pais_code]
-            moneda = info_p["moneda"]
-            tasa   = rates.get(moneda, info_p["tasa"]) if rates else info_p["tasa"]
-            col = ""
-            for r in cantidades_mostrar:
-                local = precio_usd_aproximado(r) * tasa
-                col += f"`{r:>6,}` → {info_p['simbolo']}{local:,.0f}\n"
-            embed_local.add_field(
-                name=f"{info_p['nombre']} ({moneda})", value=col, inline=True
-            )
-
-        await interaction.response.send_message(
-            embeds=[embed_usd, embed_local], ephemeral=True
-        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(
         label="💳 Metodos de pago",
@@ -1123,7 +1131,6 @@ async def cmd_cerrar(interaction: discord.Interaction):
 
     await interaction.response.send_message("🔒 Cerrando en 5 segundos…")
 
-    # Log
     datos = tickets_activos.get(interaction.channel_id, {})
     if LOG_CHANNEL_ID:
         log_ch = interaction.guild.get_channel(LOG_CHANNEL_ID)
@@ -1163,41 +1170,14 @@ async def cmd_cerrar(interaction: discord.Interaction):
 async def cmd_send(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
 
-    rates  = await obtener_tasas_live()
-    fuente = "🌐 Tasas en tiempo real" if rates else "📌 Tasas estaticas (fallback)"
-
-    cantidades_mostrar = list(PRECIOS_ROBUX.keys()) + [40_000, 50_000]
-
-    # ── Embed 1: USD ──
-    embed_usd = discord.Embed(
-        title="📊 Tabla de precios de Robux",
-        description=f"Precios **oficiales** directos del vendedor:\n*{fuente}*\n\u200b",
+    # ── Un solo embed con USD + monedas locales ──
+    embed = await construir_embed_tabla(
+        titulo="📊 Tabla de precios de Robux",
+        descripcion="Precios **oficiales** directos del vendedor:",
         color=0x00BFFF,
     )
-    col_usd = ""
-    for r in cantidades_mostrar:
-        p = precio_usd_aproximado(r)
-        col_usd += f"✅ `{r:>6,} R$` → **${p:.2f}**\n"
-    embed_usd.add_field(name="💵 Precios en USD", value=col_usd, inline=False)
 
-    # ── Embed 2: Monedas locales ──
-    embed_local = discord.Embed(
-        title="🌍 Precios en moneda local",
-        color=0xF1C40F,
-    )
-    for pais_code in ["MX", "AR", "CO", "CL", "ES"]:
-        info_p = TASAS_CAMBIO[pais_code]
-        moneda = info_p["moneda"]
-        tasa   = rates.get(moneda, info_p["tasa"]) if rates else info_p["tasa"]
-        col = ""
-        for r in cantidades_mostrar:
-            local = precio_usd_aproximado(r) * tasa
-            col += f"`{r:>6,}` → {info_p['simbolo']}{local:,.0f}\n"
-        embed_local.add_field(
-            name=f"🌍 {info_p['nombre']} ({moneda})", value=col, inline=True
-        )
-
-    await interaction.channel.send(embeds=[embed_usd, embed_local])
+    await interaction.channel.send(embed=embed)
     await interaction.followup.send("✅ Tabla enviada.", ephemeral=True)
 
 
