@@ -22,9 +22,20 @@ logger = logging.getLogger("robux-bot")
 
 # ============================================================
 #  CONFIGURACION — variables de entorno (Render.com)
+#
+#  Variables requeridas:
+#    BOT_TOKEN           — token del bot de Discord
+#
+#  Variables opcionales:
+#    GUILD_ID            — ID del servidor. Si se omite, los comandos
+#                          se sincronizan globalmente (tarda ~1 hora).
+#    CATEGORY_TICKETS_ID — ID de la categoria donde se crean tickets
+#    STAFF_ROLE_ID       — ID del rol de staff
+#    LOG_CHANNEL_ID      — ID del canal de logs
 # ============================================================
 BOT_TOKEN           = os.environ.get("BOT_TOKEN", "")
-GUILD_ID            = int(os.environ.get("GUILD_ID", "0"))
+_GUILD_ID_RAW       = os.environ.get("GUILD_ID", "").strip()
+GUILD_ID            = int(_GUILD_ID_RAW) if _GUILD_ID_RAW else None   # None = sync global
 CATEGORY_TICKETS_ID = int(os.environ["CATEGORY_TICKETS_ID"]) if os.environ.get("CATEGORY_TICKETS_ID") else None
 STAFF_ROLE_ID       = int(os.environ["STAFF_ROLE_ID"])       if os.environ.get("STAFF_ROLE_ID")       else None
 LOG_CHANNEL_ID      = int(os.environ["LOG_CHANNEL_ID"])      if os.environ.get("LOG_CHANNEL_ID")      else None
@@ -87,28 +98,28 @@ async def obtener_tasas_live():
 
 
 TASAS_CAMBIO = {
-    "MX": {"nombre": "Mexico",        "moneda": "MXN", "simbolo": "$",   "tasa": 17.50},
-    "AR": {"nombre": "Argentina",     "moneda": "ARS", "simbolo": "$",   "tasa": 900.0},
-    "CO": {"nombre": "Colombia",      "moneda": "COP", "simbolo": "$",   "tasa": 4000.0},
-    "CL": {"nombre": "Chile",         "moneda": "CLP", "simbolo": "$",   "tasa": 930.0},
-    "PE": {"nombre": "Peru",          "moneda": "PEN", "simbolo": "S/",  "tasa": 3.75},
-    "VE": {"nombre": "Venezuela",     "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
-    "EC": {"nombre": "Ecuador",       "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
-    "BO": {"nombre": "Bolivia",       "moneda": "BOB", "simbolo": "Bs",  "tasa": 6.90},
-    "PY": {"nombre": "Paraguay",      "moneda": "PYG", "simbolo": "₲",   "tasa": 7300.0},
-    "UY": {"nombre": "Uruguay",       "moneda": "UYU", "simbolo": "$",   "tasa": 38.50},
-    "BR": {"nombre": "Brasil",        "moneda": "BRL", "simbolo": "R$",  "tasa": 5.00},
-    "ES": {"nombre": "España",        "moneda": "EUR", "simbolo": "€",   "tasa": 0.92},
-    "US": {"nombre": "Estados Unidos", "moneda": "USD", "simbolo": "$",  "tasa": 1.0},
-    "GT": {"nombre": "Guatemala",     "moneda": "GTQ", "simbolo": "Q",   "tasa": 7.80},
-    "SV": {"nombre": "El Salvador",   "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
-    "HN": {"nombre": "Honduras",      "moneda": "HNL", "simbolo": "L",   "tasa": 24.70},
-    "NI": {"nombre": "Nicaragua",     "moneda": "NIO", "simbolo": "C$",  "tasa": 36.60},
-    "CR": {"nombre": "Costa Rica",    "moneda": "CRC", "simbolo": "₡",   "tasa": 520.0},
-    "PA": {"nombre": "Panama",        "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
-    "DO": {"nombre": "Rep. Dominicana","moneda": "DOP","simbolo": "RD$", "tasa": 57.0},
-    "CU": {"nombre": "Cuba",          "moneda": "CUP", "simbolo": "$",   "tasa": 24.0},
-    "PR": {"nombre": "Puerto Rico",   "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
+    "MX": {"nombre": "Mexico",         "moneda": "MXN", "simbolo": "$",   "tasa": 17.50},
+    "AR": {"nombre": "Argentina",      "moneda": "ARS", "simbolo": "$",   "tasa": 900.0},
+    "CO": {"nombre": "Colombia",       "moneda": "COP", "simbolo": "$",   "tasa": 4000.0},
+    "CL": {"nombre": "Chile",          "moneda": "CLP", "simbolo": "$",   "tasa": 930.0},
+    "PE": {"nombre": "Peru",           "moneda": "PEN", "simbolo": "S/",  "tasa": 3.75},
+    "VE": {"nombre": "Venezuela",      "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
+    "EC": {"nombre": "Ecuador",        "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
+    "BO": {"nombre": "Bolivia",        "moneda": "BOB", "simbolo": "Bs",  "tasa": 6.90},
+    "PY": {"nombre": "Paraguay",       "moneda": "PYG", "simbolo": "₲",   "tasa": 7300.0},
+    "UY": {"nombre": "Uruguay",        "moneda": "UYU", "simbolo": "$",   "tasa": 38.50},
+    "BR": {"nombre": "Brasil",         "moneda": "BRL", "simbolo": "R$",  "tasa": 5.00},
+    "ES": {"nombre": "España",         "moneda": "EUR", "simbolo": "€",   "tasa": 0.92},
+    "US": {"nombre": "Estados Unidos", "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
+    "GT": {"nombre": "Guatemala",      "moneda": "GTQ", "simbolo": "Q",   "tasa": 7.80},
+    "SV": {"nombre": "El Salvador",    "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
+    "HN": {"nombre": "Honduras",       "moneda": "HNL", "simbolo": "L",   "tasa": 24.70},
+    "NI": {"nombre": "Nicaragua",      "moneda": "NIO", "simbolo": "C$",  "tasa": 36.60},
+    "CR": {"nombre": "Costa Rica",     "moneda": "CRC", "simbolo": "₡",   "tasa": 520.0},
+    "PA": {"nombre": "Panama",         "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
+    "DO": {"nombre": "Rep. Dominicana","moneda": "DOP", "simbolo": "RD$", "tasa": 57.0},
+    "CU": {"nombre": "Cuba",           "moneda": "CUP", "simbolo": "$",   "tasa": 24.0},
+    "PR": {"nombre": "Puerto Rico",    "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
 }
 
 # ============================================================
@@ -168,13 +179,27 @@ bot  = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
 
 # ============================================================
+#  HELPER — guild object o None (para comandos y sync)
+# ============================================================
+
+def guild_obj() -> Optional[discord.Object]:
+    """Devuelve discord.Object(GUILD_ID) si hay guild, o None para global."""
+    return discord.Object(id=GUILD_ID) if GUILD_ID else None
+
+
+def registrar_comando(guild: Optional[discord.Object] = None):
+    """Decorador que registra un comando en el guild o globalmente."""
+    return guild
+
+
+# ============================================================
 #  ESTADOS Y COLORES
 # ============================================================
 ESTADOS = {
-    "abierto":    {"emoji": "🟢", "texto": "Abierto",                   "color": 0x00BFFF},
-    "pendiente":  {"emoji": "🟡", "texto": "Pendiente de verificacion", "color": 0xF39C12},
-    "entregado":  {"emoji": "✅", "texto": "Robux entregados",           "color": 0x2ECC71},
-    "cerrado":    {"emoji": "🔴", "texto": "Cerrado",                   "color": 0xE74C3C},
+    "abierto":   {"emoji": "🟢", "texto": "Abierto",                   "color": 0x00BFFF},
+    "pendiente": {"emoji": "🟡", "texto": "Pendiente de verificacion", "color": 0xF39C12},
+    "entregado": {"emoji": "✅", "texto": "Robux entregados",           "color": 0x2ECC71},
+    "cerrado":   {"emoji": "🔴", "texto": "Cerrado",                   "color": 0xE74C3C},
 }
 
 DESCRIPCIONES_ESTADO = {
@@ -218,7 +243,6 @@ def es_staff(member: discord.Member) -> bool:
 
 
 def crear_embed_ticket(datos: dict) -> discord.Embed:
-    """Construye el embed del ticket segun su estado actual."""
     estado_key  = datos.get("estado", "abierto")
     estado_info = ESTADOS.get(estado_key, ESTADOS["abierto"])
     info_pais   = TASAS_CAMBIO.get(datos.get("pais", ""), {})
@@ -237,7 +261,7 @@ def crear_embed_ticket(datos: dict) -> discord.Embed:
         url="https://upload.wikimedia.org/wikipedia/commons/thumb/"
             "6/6e/Roblox_Logo_2022.svg/512px-Roblox_Logo_2022.svg.png"
     )
-    embed.add_field(name="👤 Comprador",         value=f"<@{datos['autor_id']}>",   inline=True)
+    embed.add_field(name="👤 Comprador",         value=f"<@{datos['autor_id']}>",              inline=True)
     embed.add_field(
         name="🌍 Pais",
         value=f"{info_pais.get('nombre', '?')} ({info_pais.get('moneda', '?')})",
@@ -259,7 +283,7 @@ def crear_embed_ticket(datos: dict) -> discord.Embed:
     )
 
     if estado_key == "pendiente" and datos.get("pagado_por"):
-        embed.add_field(name="💳 Pago marcado por", value=f"<@{datos['pagado_por']}>", inline=True)
+        embed.add_field(name="💳 Pago marcado por", value=f"<@{datos['pagado_por']}>",  inline=True)
     if estado_key == "entregado" and datos.get("entregado_por"):
         embed.add_field(name="📦 Entregado por",    value=f"<@{datos['entregado_por']}>", inline=True)
 
@@ -272,32 +296,25 @@ def crear_embed_ticket(datos: dict) -> discord.Embed:
 # ──────────────────────────────────────────────────────────────
 
 async def construir_embed_tabla(titulo: str, descripcion: str, color: int) -> discord.Embed:
-    """
-    Devuelve UN solo embed con la columna USD y las columnas de cada pais,
-    todos como fields inline para que Discord los muestre en columnas.
-    Discord agrupa de 3 en 3, por lo que USD + 5 paises = 2 filas de 3.
-    """
     rates  = await obtener_tasas_live()
-    fuente = "🌐 Tasas en tiempo real" if rates else "📌 Tasas estaticas (fallback)"
 
     cantidades = list(PRECIOS_ROBUX.keys()) + [40_000, 50_000]
 
     embed = discord.Embed(
         title=titulo,
-        description=f"{descripcion}\n*{fuente}*\n\u200b",
+        description=f"{descripcion}\n\u200b",
         color=color,
     )
 
-    # ── Columna 1: USD ──
+    # Columna USD
     col_usd = ""
     for r in cantidades:
         p = precio_usd_aproximado(r)
         col_usd += f"✅ `{r:>6,}` → **${p:.2f}**\n"
     embed.add_field(name="💵 USD", value=col_usd, inline=True)
 
-    # ── Columnas 2-6: monedas locales ──
-    paises_mostrar = ["MX", "AR", "CO", "CL", "ES"]
-    for codigo in paises_mostrar:
+    # Columnas monedas locales
+    for codigo in ["MX", "AR", "CO", "CL", "ES"]:
         info_p = TASAS_CAMBIO[codigo]
         moneda = info_p["moneda"]
         tasa   = rates.get(moneda, info_p["tasa"]) if rates else info_p["tasa"]
@@ -375,7 +392,6 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
             )
             return
 
-        # ── Limite de tickets por usuario ──
         tickets_del_usuario = sum(
             1 for t in tickets_activos.values()
             if t.get("autor_id") == interaction.user.id
@@ -392,7 +408,6 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
         precio_local, precio_texto, usd = await calcular_precio(robux, codigo)
         info_pais = TASAS_CAMBIO[codigo]
 
-        # ── Crear canal ──
         guild = interaction.guild
         async with ticket_lock:
             ticket_counter += 1
@@ -438,7 +453,6 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
             )
             return
 
-        # ── Guardar datos ──
         datos_ticket = {
             "autor_id":       interaction.user.id,
             "numero":         numero,
@@ -458,7 +472,6 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
         tickets_activos[canal.id] = datos_ticket
         guardar_datos()
 
-        # ── Embed + botones ──
         embed = crear_embed_ticket(datos_ticket)
         vista = VistaTicket()
 
@@ -471,7 +484,6 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
             view=vista,
         )
 
-        # ── Log ──
         if LOG_CHANNEL_ID:
             log_ch = guild.get_channel(LOG_CHANNEL_ID)
             if log_ch:
@@ -500,7 +512,6 @@ class VistaTicket(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    # ─── 1) MARCAR COMO PAGADO ───────────────────────────
     @discord.ui.button(
         label="💳 Marcar como pagado",
         style=discord.ButtonStyle.primary,
@@ -509,31 +520,20 @@ class VistaTicket(discord.ui.View):
     async def pagado(self, interaction: discord.Interaction, button: discord.ui.Button):
         datos = tickets_activos.get(interaction.channel_id)
         if not datos:
-            await interaction.response.send_message(
-                "❌ No encontre datos de este ticket.", ephemeral=True
-            )
+            await interaction.response.send_message("❌ No encontre datos de este ticket.", ephemeral=True)
             return
 
         estado = datos.get("estado", "abierto")
         if estado == "pendiente":
-            await interaction.response.send_message(
-                "⚠️ Este ticket ya esta marcado como **pendiente de verificacion**.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message("⚠️ Este ticket ya esta marcado como **pendiente de verificacion**.", ephemeral=True)
             return
         if estado == "entregado":
-            await interaction.response.send_message(
-                "⚠️ Los Robux ya fueron **entregados** en este ticket.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message("⚠️ Los Robux ya fueron **entregados** en este ticket.", ephemeral=True)
             return
         if estado == "cerrado":
-            await interaction.response.send_message(
-                "⚠️ Este ticket esta **cerrado**.", ephemeral=True
-            )
+            await interaction.response.send_message("⚠️ Este ticket esta **cerrado**.", ephemeral=True)
             return
 
-        # ── Cambiar a PENDIENTE ──
         datos["estado"]     = "pendiente"
         datos["pagado_por"] = interaction.user.id
         guardar_datos()
@@ -549,9 +549,7 @@ class VistaTicket(discord.ui.View):
             timestamp=datetime.datetime.utcnow(),
         )
         staff_ping = f"<@&{STAFF_ROLE_ID}>" if STAFF_ROLE_ID else ""
-        await interaction.response.send_message(
-            content=staff_ping, embed=notif
-        )
+        await interaction.response.send_message(content=staff_ping, embed=notif)
 
         try:
             if interaction.message:
@@ -573,7 +571,6 @@ class VistaTicket(discord.ui.View):
                     timestamp=datetime.datetime.utcnow(),
                 ))
 
-    # ─── 2) CONFIRMAR ENTREGA  (solo staff) ─────────────
     @discord.ui.button(
         label="📦 Confirmar entrega",
         style=discord.ButtonStyle.success,
@@ -581,35 +578,23 @@ class VistaTicket(discord.ui.View):
     )
     async def confirmar_entrega(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not es_staff(interaction.user):
-            await interaction.response.send_message(
-                "❌ Solo el **staff** puede confirmar la entrega de Robux.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message("❌ Solo el **staff** puede confirmar la entrega de Robux.", ephemeral=True)
             return
 
         datos = tickets_activos.get(interaction.channel_id)
         if not datos:
-            await interaction.response.send_message(
-                "❌ No encontre datos de este ticket.", ephemeral=True
-            )
+            await interaction.response.send_message("❌ No encontre datos de este ticket.", ephemeral=True)
             return
 
         estado = datos.get("estado", "abierto")
         if estado == "abierto":
-            await interaction.response.send_message(
-                "⚠️ El comprador aun no ha marcado el pago. Estado: **Abierto**.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message("⚠️ El comprador aun no ha marcado el pago. Estado: **Abierto**.", ephemeral=True)
             return
         if estado == "entregado":
-            await interaction.response.send_message(
-                "⚠️ Los Robux ya fueron **entregados**.", ephemeral=True
-            )
+            await interaction.response.send_message("⚠️ Los Robux ya fueron **entregados**.", ephemeral=True)
             return
         if estado == "cerrado":
-            await interaction.response.send_message(
-                "⚠️ Este ticket esta **cerrado**.", ephemeral=True
-            )
+            await interaction.response.send_message("⚠️ Este ticket esta **cerrado**.", ephemeral=True)
             return
 
         datos["estado"]        = "entregado"
@@ -650,7 +635,6 @@ class VistaTicket(discord.ui.View):
                     timestamp=datetime.datetime.utcnow(),
                 ))
 
-    # ─── 3) CERRAR TICKET ───────────────────────────────
     @discord.ui.button(
         label="🔒 Cerrar ticket",
         style=discord.ButtonStyle.danger,
@@ -663,22 +647,16 @@ class VistaTicket(discord.ui.View):
             es_autor = interaction.user.id == datos.get("autor_id")
             if not es_autor and not es_staff(interaction.user):
                 await interaction.response.send_message(
-                    "❌ Solo el **staff** o el creador del ticket pueden cerrarlo.",
-                    ephemeral=True,
+                    "❌ Solo el **staff** o el creador del ticket pueden cerrarlo.", ephemeral=True
                 )
                 return
 
-        await interaction.response.send_message(
-            "🔒 Cerrando ticket en **5 segundos**…"
-        )
+        await interaction.response.send_message("🔒 Cerrando ticket en **5 segundos**…")
 
         if LOG_CHANNEL_ID:
             log_ch = interaction.guild.get_channel(LOG_CHANNEL_ID)
             if log_ch:
-                desc = (
-                    f"**Canal:** {interaction.channel.name}\n"
-                    f"**Cerrado por:** {interaction.user}"
-                )
+                desc = f"**Canal:** {interaction.channel.name}\n**Cerrado por:** {interaction.user}"
                 if datos:
                     desc += f"\n**Robux:** {datos.get('robux', 0):,}"
                 await log_ch.send(embed=discord.Embed(
@@ -689,20 +667,14 @@ class VistaTicket(discord.ui.View):
                 ))
 
         await asyncio.sleep(5)
-
         tickets_activos.pop(interaction.channel_id, None)
         guardar_datos()
 
         try:
-            await interaction.channel.delete(
-                reason=f"Ticket cerrado por {interaction.user}"
-            )
+            await interaction.channel.delete(reason=f"Ticket cerrado por {interaction.user}")
         except discord.Forbidden:
-            await interaction.followup.send(
-                "❌ No tengo permisos para eliminar el canal.", ephemeral=True
-            )
+            await interaction.followup.send("❌ No tengo permisos para eliminar el canal.", ephemeral=True)
 
-    # ─── 4) VER RESUMEN ─────────────────────────────────
     @discord.ui.button(
         label="📋 Ver resumen",
         style=discord.ButtonStyle.secondary,
@@ -711,31 +683,22 @@ class VistaTicket(discord.ui.View):
     async def resumen(self, interaction: discord.Interaction, button: discord.ui.Button):
         datos = tickets_activos.get(interaction.channel_id)
         if not datos:
-            await interaction.response.send_message(
-                "❌ No hay datos guardados para este ticket.", ephemeral=True
-            )
+            await interaction.response.send_message("❌ No hay datos guardados para este ticket.", ephemeral=True)
             return
 
         info_pais   = TASAS_CAMBIO.get(datos.get("pais", ""), {})
         estado_info = ESTADOS.get(datos.get("estado", "abierto"), ESTADOS["abierto"])
 
-        embed = discord.Embed(
-            title="📋 Resumen del ticket",
-            color=estado_info["color"],
-        )
-        embed.add_field(name="Robux",          value=f"{datos['robux']:,} R$",               inline=True)
-        embed.add_field(name="Pais",           value=info_pais.get("nombre", "?"),           inline=True)
-        embed.add_field(name="Precio USD",     value=f"${datos.get('precio_usd', 0):.2f}",  inline=True)
-        embed.add_field(name="Precio local",   value=datos.get("precio_texto", "?"),         inline=True)
-        embed.add_field(name="Usuario Roblox", value=datos.get("usuario_roblox", "?"),       inline=True)
-        embed.add_field(name="Metodo de pago", value=datos.get("metodo_pago", "?"),          inline=True)
-        embed.add_field(
-            name="Estado",
-            value=f"{estado_info['emoji']} {estado_info['texto']}",
-            inline=True,
-        )
+        embed = discord.Embed(title="📋 Resumen del ticket", color=estado_info["color"])
+        embed.add_field(name="Robux",          value=f"{datos['robux']:,} R$",              inline=True)
+        embed.add_field(name="Pais",           value=info_pais.get("nombre", "?"),          inline=True)
+        embed.add_field(name="Precio USD",     value=f"${datos.get('precio_usd', 0):.2f}", inline=True)
+        embed.add_field(name="Precio local",   value=datos.get("precio_texto", "?"),        inline=True)
+        embed.add_field(name="Usuario Roblox", value=datos.get("usuario_roblox", "?"),      inline=True)
+        embed.add_field(name="Metodo de pago", value=datos.get("metodo_pago", "?"),         inline=True)
+        embed.add_field(name="Estado",         value=f"{estado_info['emoji']} {estado_info['texto']}", inline=True)
         if datos.get("pagado_por"):
-            embed.add_field(name="Pago marcado por", value=f"<@{datos['pagado_por']}>", inline=True)
+            embed.add_field(name="Pago marcado por", value=f"<@{datos['pagado_por']}>",  inline=True)
         if datos.get("entregado_por"):
             embed.add_field(name="Entregado por",    value=f"<@{datos['entregado_por']}>", inline=True)
 
@@ -766,7 +729,6 @@ class VistaPanelPrincipal(discord.ui.View):
         emoji="📊",
     )
     async def ver_precios(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # ── Un solo embed con USD + monedas locales ──
         embed = await construir_embed_tabla(
             titulo="📊 Precios de Robux",
             descripcion="Precios **oficiales** directos del vendedor:",
@@ -807,26 +769,10 @@ class VistaPanelPrincipal(discord.ui.View):
     )
     async def ayuda(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = discord.Embed(title="❓ Preguntas frecuentes", color=0x1ABC9C)
-        embed.add_field(
-            name="¿Como compro Robux?",
-            value="Haz clic en **🎮 Comprar Robux**, completa el formulario y espera a un staff.",
-            inline=False,
-        )
-        embed.add_field(
-            name="¿Cuanto tiempo tarda?",
-            value="Normalmente entre 5 y 30 minutos segun disponibilidad del staff.",
-            inline=False,
-        )
-        embed.add_field(
-            name="¿Que metodos de pago aceptan?",
-            value="Crypto, CashApp, PayPal, Nequi, Bancolombia, OXXO, Transferencia, Yape, MercadoPago y mas.",
-            inline=False,
-        )
-        embed.add_field(
-            name="¿Es seguro?",
-            value="Si, nuestro staff verificado gestiona cada transaccion manualmente.",
-            inline=False,
-        )
+        embed.add_field(name="¿Como compro Robux?",       value="Haz clic en **🎮 Comprar Robux**, completa el formulario y espera a un staff.", inline=False)
+        embed.add_field(name="¿Cuanto tiempo tarda?",     value="Normalmente entre 5 y 30 minutos segun disponibilidad del staff.", inline=False)
+        embed.add_field(name="¿Que metodos de pago aceptan?", value="Crypto, CashApp, PayPal, Nequi, Bancolombia, OXXO, Transferencia, Yape, MercadoPago y mas.", inline=False)
+        embed.add_field(name="¿Es seguro?",               value="Si, nuestro staff verificado gestiona cada transaccion manualmente.", inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
@@ -843,41 +789,27 @@ class ModalAgregarRol(discord.ui.Modal, title="➕ Agregar Autorol"):
 
     async def on_submit(self, interaction: discord.Interaction):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                "❌ Solo los administradores pueden agregar autoroles.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message("❌ Solo los administradores pueden agregar autoroles.", ephemeral=True)
             return
 
         try:
             role_id = int(self.role_id_input.value.strip())
         except ValueError:
-            await interaction.response.send_message(
-                "❌ La ID del rol debe ser un numero valido.", ephemeral=True
-            )
+            await interaction.response.send_message("❌ La ID del rol debe ser un numero valido.", ephemeral=True)
             return
 
         role = interaction.guild.get_role(role_id)
         if not role:
-            await interaction.response.send_message(
-                f"❌ No encontre ningun rol con la ID `{role_id}` en este servidor.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message(f"❌ No encontre ningun rol con la ID `{role_id}` en este servidor.", ephemeral=True)
             return
 
         if role_id in autoroles_registrados:
-            await interaction.response.send_message(
-                f"⚠️ El rol **{role.name}** ya esta registrado como autorol.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message(f"⚠️ El rol **{role.name}** ya esta registrado como autorol.", ephemeral=True)
             return
 
         autoroles_registrados[role_id] = role.name
         guardar_datos()
-        await interaction.response.send_message(
-            f"✅ Rol **{role.name}** agregado a los autoroles correctamente.",
-            ephemeral=True,
-        )
+        await interaction.response.send_message(f"✅ Rol **{role.name}** agregado a los autoroles correctamente.", ephemeral=True)
 
 
 class VistaAutorolSelect(discord.ui.View):
@@ -898,28 +830,19 @@ class VistaAutorolSelect(discord.ui.View):
         role_id = int(interaction.data["values"][0])
         role    = interaction.guild.get_role(role_id)
         if not role:
-            await interaction.response.send_message(
-                "❌ No se encontro el rol. Puede que haya sido eliminado.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message("❌ No se encontro el rol. Puede que haya sido eliminado.", ephemeral=True)
             return
 
         try:
             if role in interaction.user.roles:
                 await interaction.user.remove_roles(role, reason="Autorol quitado")
-                await interaction.response.send_message(
-                    f"➖ Se te quito el rol **{role.name}**.", ephemeral=True
-                )
+                await interaction.response.send_message(f"➖ Se te quito el rol **{role.name}**.", ephemeral=True)
             else:
                 await interaction.user.add_roles(role, reason="Autorol asignado")
-                await interaction.response.send_message(
-                    f"✅ Se te asigno el rol **{role.name}**.", ephemeral=True
-                )
+                await interaction.response.send_message(f"✅ Se te asigno el rol **{role.name}**.", ephemeral=True)
         except discord.Forbidden:
             await interaction.response.send_message(
-                "❌ No tengo permisos para asignar ese rol. "
-                "Asegurate de que mi rol este por encima.",
-                ephemeral=True,
+                "❌ No tengo permisos para asignar ese rol. Asegurate de que mi rol este por encima.", ephemeral=True
             )
 
 
@@ -927,31 +850,17 @@ class VistaPanelAutoroles(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(
-        label="Agregar rol",
-        style=discord.ButtonStyle.success,
-        custom_id="panel2_agregar_rol",
-    )
+    @discord.ui.button(label="Agregar rol",    style=discord.ButtonStyle.success, custom_id="panel2_agregar_rol")
     async def agregar_rol(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                "❌ Solo los administradores pueden agregar autoroles.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message("❌ Solo los administradores pueden agregar autoroles.", ephemeral=True)
             return
         await interaction.response.send_modal(ModalAgregarRol())
 
-    @discord.ui.button(
-        label="Obtener autorol",
-        style=discord.ButtonStyle.primary,
-        custom_id="panel2_obtener_autorol",
-    )
+    @discord.ui.button(label="Obtener autorol", style=discord.ButtonStyle.primary, custom_id="panel2_obtener_autorol")
     async def obtener_autorol(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not autoroles_registrados:
-            await interaction.response.send_message(
-                "❌ No hay autoroles configurados aun. Un admin debe agregar roles primero.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message("❌ No hay autoroles configurados aun. Un admin debe agregar roles primero.", ephemeral=True)
             return
 
         roles_validos = [
@@ -960,10 +869,7 @@ class VistaPanelAutoroles(discord.ui.View):
             if interaction.guild.get_role(rid) is not None
         ]
         if not roles_validos:
-            await interaction.response.send_message(
-                "❌ Los roles registrados ya no existen en el servidor.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message("❌ Los roles registrados ya no existen en el servidor.", ephemeral=True)
             return
 
         roles_validos = roles_validos[:25]
@@ -984,12 +890,14 @@ class VistaPanelAutoroles(discord.ui.View):
 
 # ──────────────────────────────────────────────
 #  COMANDOS SLASH
+#  Si GUILD_ID está definido → se registran en ese guild (instantáneo)
+#  Si GUILD_ID es None       → se registran globalmente (tarda ~1 hora)
 # ──────────────────────────────────────────────
 
 @tree.command(
     name="panel",
     description="📌 Envia el panel principal de compra de Robux",
-    guild=discord.Object(id=GUILD_ID),
+    guild=guild_obj(),
 )
 @app_commands.checks.has_permissions(administrator=True)
 async def cmd_panel(interaction: discord.Interaction):
@@ -1014,7 +922,7 @@ async def cmd_panel(interaction: discord.Interaction):
 @tree.command(
     name="panel2",
     description="🛡️ Envia el panel de autoroles",
-    guild=discord.Object(id=GUILD_ID),
+    guild=guild_obj(),
 )
 @app_commands.checks.has_permissions(administrator=True)
 async def cmd_panel2(interaction: discord.Interaction):
@@ -1028,15 +936,13 @@ async def cmd_panel2(interaction: discord.Interaction):
         color=0x9B59B6,
     )
     await interaction.channel.send(embed=embed, view=VistaPanelAutoroles())
-    await interaction.response.send_message(
-        "✅ Panel de autoroles enviado.", ephemeral=True
-    )
+    await interaction.response.send_message("✅ Panel de autoroles enviado.", ephemeral=True)
 
 
 @tree.command(
     name="precio",
     description="💰 Calcula el precio de Robux en tu moneda local",
-    guild=discord.Object(id=GUILD_ID),
+    guild=guild_obj(),
 )
 @app_commands.describe(robux="Cantidad de Robux", pais="Codigo de tu pais")
 @app_commands.choices(pais=opciones_paises())
@@ -1044,15 +950,12 @@ async def cmd_precio(interaction: discord.Interaction, robux: int, pais: str):
     codigo = pais.strip().upper()
     if codigo not in TASAS_CAMBIO:
         await interaction.response.send_message(
-            f"❌ Codigo **{codigo}** no reconocido. "
-            f"Usa alguno de: {', '.join(TASAS_CAMBIO.keys())}",
+            f"❌ Codigo **{codigo}** no reconocido. Usa alguno de: {', '.join(TASAS_CAMBIO.keys())}",
             ephemeral=True,
         )
         return
     if robux <= 0 or robux > 50_000:
-        await interaction.response.send_message(
-            "❌ La cantidad debe ser entre 1 y 50,000 Robux.", ephemeral=True
-        )
+        await interaction.response.send_message("❌ La cantidad debe ser entre 1 y 50,000 Robux.", ephemeral=True)
         return
 
     info = TASAS_CAMBIO[codigo]
@@ -1084,7 +987,7 @@ async def cmd_precio(interaction: discord.Interaction, robux: int, pais: str):
 @tree.command(
     name="tickets",
     description="📋 Lista los tickets activos (solo staff)",
-    guild=discord.Object(id=GUILD_ID),
+    guild=guild_obj(),
 )
 @app_commands.checks.has_permissions(manage_channels=True)
 async def cmd_tickets(interaction: discord.Interaction):
@@ -1093,14 +996,10 @@ async def cmd_tickets(interaction: discord.Interaction):
         if v.get("estado") in ("abierto", "pendiente")
     }
     if not activos:
-        await interaction.response.send_message(
-            "No hay tickets activos.", ephemeral=True
-        )
+        await interaction.response.send_message("No hay tickets activos.", ephemeral=True)
         return
 
-    embed = discord.Embed(
-        title=f"📋 Tickets activos: {len(activos)}", color=0x3498DB
-    )
+    embed = discord.Embed(title=f"📋 Tickets activos: {len(activos)}", color=0x3498DB)
     for canal_id, datos in list(activos.items())[:10]:
         canal        = interaction.guild.get_channel(canal_id)
         nombre_canal = canal.mention if canal else f"#{canal_id}"
@@ -1119,14 +1018,12 @@ async def cmd_tickets(interaction: discord.Interaction):
 @tree.command(
     name="cerrar",
     description="🔒 Cierra el ticket actual",
-    guild=discord.Object(id=GUILD_ID),
+    guild=guild_obj(),
 )
 @app_commands.checks.has_permissions(manage_channels=True)
 async def cmd_cerrar(interaction: discord.Interaction):
     if interaction.channel_id not in tickets_activos:
-        await interaction.response.send_message(
-            "❌ Este canal no es un ticket.", ephemeral=True
-        )
+        await interaction.response.send_message("❌ Este canal no es un ticket.", ephemeral=True)
         return
 
     await interaction.response.send_message("🔒 Cerrando en 5 segundos…")
@@ -1135,10 +1032,7 @@ async def cmd_cerrar(interaction: discord.Interaction):
     if LOG_CHANNEL_ID:
         log_ch = interaction.guild.get_channel(LOG_CHANNEL_ID)
         if log_ch:
-            desc = (
-                f"**Canal:** {interaction.channel.name}\n"
-                f"**Cerrado por:** {interaction.user}"
-            )
+            desc = f"**Canal:** {interaction.channel.name}\n**Cerrado por:** {interaction.user}"
             if datos:
                 desc += f"\n**Robux:** {datos.get('robux', 0):,}"
             await log_ch.send(embed=discord.Embed(
@@ -1152,31 +1046,24 @@ async def cmd_cerrar(interaction: discord.Interaction):
     tickets_activos.pop(interaction.channel_id, None)
     guardar_datos()
     try:
-        await interaction.channel.delete(
-            reason=f"Cerrado por {interaction.user}"
-        )
+        await interaction.channel.delete(reason=f"Cerrado por {interaction.user}")
     except discord.Forbidden:
-        await interaction.followup.send(
-            "❌ No tengo permisos para eliminar el canal.", ephemeral=True
-        )
+        await interaction.followup.send("❌ No tengo permisos para eliminar el canal.", ephemeral=True)
 
 
 @tree.command(
     name="send",
     description="📊 Envia la tabla de precios de Robux al canal (solo staff)",
-    guild=discord.Object(id=GUILD_ID),
+    guild=guild_obj(),
 )
 @app_commands.checks.has_permissions(administrator=True)
 async def cmd_send(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-
-    # ── Un solo embed con USD + monedas locales ──
     embed = await construir_embed_tabla(
         titulo="📊 Tabla de precios de Robux",
         descripcion="Precios **oficiales** directos del vendedor:",
         color=0x00BFFF,
     )
-
     await interaction.channel.send(embed=embed)
     await interaction.followup.send("✅ Tabla enviada.", ephemeral=True)
 
@@ -1194,8 +1081,14 @@ async def on_ready():
     bot.add_view(VistaPanelAutoroles())
 
     try:
-        synced = await tree.sync(guild=discord.Object(id=GUILD_ID))
-        logger.info(f"✅ Bot listo: {bot.user} | {len(synced)} comandos sincronizados")
+        if GUILD_ID:
+            # Sync solo en el guild → instantáneo
+            synced = await tree.sync(guild=discord.Object(id=GUILD_ID))
+            logger.info(f"✅ Bot listo: {bot.user} | {len(synced)} comandos sincronizados en guild {GUILD_ID}")
+        else:
+            # Sync global → disponible en todos los servidores (~1 hora)
+            synced = await tree.sync()
+            logger.info(f"✅ Bot listo: {bot.user} | {len(synced)} comandos sincronizados GLOBALMENTE")
     except Exception as e:
         logger.warning(f"⚠️ Error sincronizando comandos: {e}")
 
@@ -1206,9 +1099,7 @@ async def on_ready():
 
 
 @bot.event
-async def on_app_command_error(
-    interaction: discord.Interaction, error: app_commands.AppCommandError
-):
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
     if isinstance(error, app_commands.MissingPermissions):
         msg = "❌ No tienes permisos para usar este comando."
     else:
@@ -1232,8 +1123,9 @@ if not BOT_TOKEN:
     logger.critical("❌ BOT_TOKEN no configurado")
     exit(1)
 
-if GUILD_ID == 0:
-    logger.critical("❌ GUILD_ID no configurado")
-    exit(1)
+if GUILD_ID:
+    logger.info(f"🏠 Modo guild: comandos registrados en servidor {GUILD_ID}")
+else:
+    logger.info("🌐 Modo global: comandos registrados en todos los servidores (tarda ~1 hora en aparecer)")
 
 bot.run(BOT_TOKEN, log_handler=None)
