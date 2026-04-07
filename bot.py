@@ -9,6 +9,7 @@ import aiohttp
 import time as _time
 import json
 import logging
+import shutil
 from keep_alive import keep_alive
 
 # ============================================================
@@ -20,16 +21,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger("robux-bot")
 
+# ============================================================
+#  CONFIGURACIÓN
+# ============================================================
 BOT_TOKEN           = os.environ.get("BOT_TOKEN", "")
 _GUILD_ID_RAW       = os.environ.get("GUILD_ID", "").strip()
 GUILD_ID            = int(_GUILD_ID_RAW) if _GUILD_ID_RAW else None
 CATEGORY_TICKETS_ID = int(os.environ["CATEGORY_TICKETS_ID"]) if os.environ.get("CATEGORY_TICKETS_ID") else None
 STAFF_ROLE_ID       = int(os.environ["STAFF_ROLE_ID"])       if os.environ.get("STAFF_ROLE_ID")       else None
 LOG_CHANNEL_ID      = int(os.environ["LOG_CHANNEL_ID"])      if os.environ.get("LOG_CHANNEL_ID")      else None
+OWNER_ID            = int(os.environ.get("OWNER_ID", "0"))
 
 MAX_TICKETS_POR_USUARIO = 3
-OWNER_ID = 596764844791824417
-
 
 def es_admin_o_owner(interaction: discord.Interaction) -> bool:
     """Devuelve True si el usuario es el owner o tiene permisos de administrador."""
@@ -58,20 +61,17 @@ PRECIOS_ROBUX = {
 }
 CANTIDADES_DISPONIBLES = sorted(PRECIOS_ROBUX.keys())
 
-
 def precio_usd_aproximado(robux: int) -> float:
     if robux in PRECIOS_ROBUX:
         return PRECIOS_ROBUX[robux]
     return round(robux * TASA_USD_POR_ROBUX, 2)
 
-
-# ──────────────────────────────────────────────────────────
-#  TASAS DE CAMBIO EN TIEMPO REAL  (cache de 1 hora)
-# ──────────────────────────────────────────────────────────
+# ============================================================
+#  TASAS DE CAMBIO EN TIEMPO REAL
+# ============================================================
 _tasas_cache: dict = {}
 _tasas_ts: float   = 0.0
 _CACHE_TTL: int    = 3600
-
 
 async def obtener_tasas_live():
     global _tasas_cache, _tasas_ts
@@ -92,7 +92,6 @@ async def obtener_tasas_live():
     except Exception as e:
         logger.warning(f"⚠️ Error obteniendo tasas: {e}")
     return {}
-
 
 TASAS_CAMBIO = {
     "MX": {"nombre": "Mexico",         "moneda": "MXN", "simbolo": "$",   "tasa": 19.46},
@@ -120,7 +119,37 @@ TASAS_CAMBIO = {
 }
 
 # ============================================================
-#  PERSISTENCIA  (JSON)
+#  GRUPOS DE ROBLOX
+# ============================================================
+GRUPOS_ROBLOX = [
+    {
+        "nombre": "Mxdes UGC",
+        "url": "https://www.roblox.com/communities/32455154/Mxdes-UGC#!/about",
+        "descripcion": "Comunidad oficial de Mxdes UGC",
+        "emoji": "👑"
+    },
+    {
+        "nombre": "Experimental",
+        "url": "https://www.roblox.com/communities/33314312/Experimental#!/about",
+        "descripcion": "Grupo Experimental",
+        "emoji": "🔬"
+    },
+    {
+        "nombre": "ZillaKamii",
+        "url": "https://www.roblox.com/communities/13262547/ZillaKamii#!/about",
+        "descripcion": "Comunidad ZillaKamii",
+        "emoji": "⚡"
+    },
+    {
+        "nombre": "n0ctu",
+        "url": "https://www.roblox.com/communities/34005810/n0ctu#!/about",
+        "descripcion": "Grupo n0ctu",
+        "emoji": "🌙"
+    }
+]
+
+# ============================================================
+#  PERSISTENCIA (JSON)
 # ============================================================
 DATA_FILE = "data.json"
 tickets_activos: dict       = {}
@@ -128,13 +157,21 @@ ticket_counter: int         = 0
 autoroles_registrados: dict = {}
 ticket_lock = asyncio.Lock()
 
-
 def cargar_datos():
     global tickets_activos, ticket_counter, autoroles_registrados
     try:
         with open(DATA_FILE, "r") as f:
             data = json.load(f)
-            tickets_activos       = {int(k): v for k, v in data.get("tickets", {}).items()}
+            tickets_activos       = {}
+            for k, v in data.get("tickets", {}).items():
+                # Convertir creado_en de string a datetime
+                if "creado_en" in v and isinstance(v["creado_en"], str):
+                    try:
+                        v["creado_en"] = datetime.datetime.fromisoformat(v["creado_en"])
+                    except:
+                        v["creado_en"] = datetime.datetime.utcnow()
+                tickets_activos[int(k)] = v
+            
             ticket_counter        = data.get("counter", 0)
             autoroles_registrados = {int(k): v for k, v in data.get("autoroles", {}).items()}
             logger.info(
@@ -146,24 +183,72 @@ def cargar_datos():
     except (json.JSONDecodeError, Exception) as e:
         logger.error(f"Error cargando datos: {e}")
 
-
 def guardar_datos():
     try:
         data = {
             "tickets":   {},
             "counter":   ticket_counter,
             "autoroles": {str(k): v for k, v in autoroles_registrados.items()},
+            "version":   "1.0",
+            "last_save": datetime.datetime.utcnow().isoformat()
         }
         for k, v in tickets_activos.items():
             copia = dict(v)
             if "creado_en" in copia and isinstance(copia["creado_en"], datetime.datetime):
                 copia["creado_en"] = copia["creado_en"].isoformat()
             data["tickets"][str(k)] = copia
-        with open(DATA_FILE, "w") as f:
+        
+        # Escribir a archivo temporal primero
+        temp_file = DATA_FILE + ".tmp"
+        with open(temp_file, "w") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        
+        # Reemplazar archivo original
+        os.replace(temp_file, DATA_FILE)
+        logger.debug("Datos guardados exitosamente")
+        
     except Exception as e:
-        logger.error(f"Error guardando datos: {e}")
+        logger.error(f"❌ Error crítico guardando datos: {e}")
+        # Intentar guardar en archivo de emergencia
+        try:
+            emergency_file = f"data_emergency_{int(_time.time())}.json"
+            with open(emergency_file, "w") as f:
+                json.dump(data, f)
+            logger.warning(f"⚠️ Datos guardados en archivo de emergencia: {emergency_file}")
+        except:
+            pass
 
+# ============================================================
+#  BACKUP AUTOMÁTICO
+# ============================================================
+async def backup_automatico():
+    """Crea backup del archivo de datos cada hora"""
+    await asyncio.sleep(60)  # Esperar 1 minuto antes del primer backup
+    while True:
+        await asyncio.sleep(3600)  # 1 hora
+        try:
+            if not os.path.exists(DATA_FILE):
+                continue
+                
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_name = f"data_backup_{timestamp}.json"
+            shutil.copy2(DATA_FILE, backup_name)
+            logger.info(f"✅ Backup creado: {backup_name}")
+            
+            # Mantener solo los últimos 24 backups
+            import glob
+            backups = sorted(glob.glob("data_backup_*.json"))
+            if len(backups) > 24:
+                for old_backup in backups[:-24]:
+                    try:
+                        os.remove(old_backup)
+                        logger.debug(f"Backup antiguo eliminado: {old_backup}")
+                    except:
+                        pass
+        except Exception as e:
+            logger.error(f"Error en backup automático: {e}")
 
 # ============================================================
 #  BOT
@@ -171,14 +256,13 @@ def guardar_datos():
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
+intents.members = True
 
 bot  = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
 
-
 def guild_obj() -> Optional[discord.Object]:
     return discord.Object(id=GUILD_ID) if GUILD_ID else None
-
 
 # ============================================================
 #  ESTADOS Y COLORES
@@ -201,10 +285,11 @@ DESCRIPCIONES_ESTADO = {
 #  UTILIDADES
 # ============================================================
 
-async def calcular_precio(robux: int, codigo_pais: str) -> Tuple:
+async def calcular_precio(robux: int, codigo_pais: str) -> Tuple[Optional[float], Optional[str], Optional[float]]:
     info = TASAS_CAMBIO.get(codigo_pais.upper())
     if not info:
-        return None, None, None
+        raise ValueError(f"País {codigo_pais} no soportado")
+    
     usd   = precio_usd_aproximado(robux)
     rates = await obtener_tasas_live()
     tasa  = rates.get(info["moneda"], info["tasa"]) if rates else info["tasa"]
@@ -212,13 +297,11 @@ async def calcular_precio(robux: int, codigo_pais: str) -> Tuple:
     texto = f"{info['simbolo']}{local:,.2f} {info['moneda']}"
     return local, texto, usd
 
-
 def opciones_paises():
     return [
         app_commands.Choice(name=f"{v['nombre']} ({v['moneda']})", value=k)
         for k, v in TASAS_CAMBIO.items()
     ]
-
 
 def es_staff(member: discord.Member) -> bool:
     if member.guild_permissions.manage_channels or member.guild_permissions.administrator:
@@ -228,7 +311,6 @@ def es_staff(member: discord.Member) -> bool:
         if staff_role and staff_role in member.roles:
             return True
     return False
-
 
 def crear_embed_ticket(datos: dict) -> discord.Embed:
     estado_key  = datos.get("estado", "abierto")
@@ -278,16 +360,9 @@ def crear_embed_ticket(datos: dict) -> discord.Embed:
     embed.set_footer(text=f"Ticket #{numero:04d}")
     return embed
 
-
-# ──────────────────────────────────────────────────────────────
-#  HELPER — construir embed de tabla de precios (un solo embed)
-# ──────────────────────────────────────────────────────────────
-
 async def construir_embed_tabla(titulo: str, descripcion: str, color: int) -> discord.Embed:
     rates  = await obtener_tasas_live()
-
-    # Solo hasta 30,000 Robux
-    cantidades = list(PRECIOS_ROBUX.keys())  # 1k..30k
+    cantidades = list(PRECIOS_ROBUX.keys())
 
     embed = discord.Embed(
         title=titulo,
@@ -302,15 +377,11 @@ async def construir_embed_tabla(titulo: str, descripcion: str, color: int) -> di
         col_usd += f"✅ `{r:>6,}` → **${p:.2f}**\n"
     embed.add_field(name="💵 USD", value=col_usd, inline=True)
 
-    # Columnas monedas locales
-    for codigo in ["MX", "AR", "CO", "CL", "ES"]:
+    # Columnas monedas locales (máximo 4 para no exceder límite)
+    for codigo in ["MX", "AR", "CO", "ES"]:
         info_p = TASAS_CAMBIO[codigo]
         moneda = info_p["moneda"]
-        # Para MX y CO usamos siempre la tasa fija (precios fijados por el vendedor)
-        if codigo in ("MX", "CO", "AR", "CL"):
-            tasa = info_p["tasa"]
-        else:
-            tasa = rates.get(moneda, info_p["tasa"]) if rates else info_p["tasa"]
+        tasa = info_p["tasa"] if codigo in ("MX", "CO", "AR") else rates.get(moneda, info_p["tasa"]) if rates else info_p["tasa"]
         col = ""
         for r in cantidades:
             local = precio_usd_aproximado(r) * tasa
@@ -323,10 +394,30 @@ async def construir_embed_tabla(titulo: str, descripcion: str, color: int) -> di
 
     return embed
 
+async def log_accion(guild: discord.Guild, tipo: str, descripcion: str, color: int):
+    """Función centralizada para logs"""
+    if not LOG_CHANNEL_ID:
+        return
+    
+    log_ch = guild.get_channel(LOG_CHANNEL_ID)
+    if not log_ch:
+        return
+    
+    embed = discord.Embed(
+        title=tipo,
+        description=descripcion,
+        color=color,
+        timestamp=datetime.datetime.utcnow()
+    )
+    
+    try:
+        await log_ch.send(embed=embed)
+    except Exception as e:
+        logger.error(f"Error enviando log: {e}")
 
-# ──────────────────────────────────────────────
-#  MODAL — formulario de compra
-# ──────────────────────────────────────────────
+# ============================================================
+#  MODAL — FORMULARIO DE COMPRA
+# ============================================================
 
 class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
     pais = discord.ui.TextInput(
@@ -384,6 +475,15 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
             )
             return
 
+        # Validar usuario de Roblox
+        usuario_roblox = self.usuario_roblox.value.strip()
+        if not usuario_roblox.replace("_", "").isalnum():
+            await interaction.response.send_message(
+                "❌ El nombre de usuario de Roblox solo puede contener letras, números y guiones bajos.",
+                ephemeral=True
+            )
+            return
+
         tickets_del_usuario = sum(
             1 for t in tickets_activos.values()
             if t.get("autor_id") == interaction.user.id
@@ -397,13 +497,19 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
             )
             return
 
-        precio_local, precio_texto, usd = await calcular_precio(robux, codigo)
-        info_pais = TASAS_CAMBIO[codigo]
+        try:
+            precio_local, precio_texto, usd = await calcular_precio(robux, codigo)
+        except ValueError as e:
+            await interaction.response.send_message(f"❌ {e}", ephemeral=True)
+            return
 
+        info_pais = TASAS_CAMBIO[codigo]
         guild = interaction.guild
+        
         async with ticket_lock:
             ticket_counter += 1
             numero = ticket_counter
+            guardar_datos()  # Guardar inmediatamente
 
         nombre_canal = f"ticket-{numero:04d}-{interaction.user.name.lower()[:10]}"
 
@@ -453,11 +559,11 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
             "precio_usd":     usd,
             "precio_local":   precio_local,
             "precio_texto":   precio_texto,
-            "usuario_roblox": self.usuario_roblox.value.strip(),
+            "usuario_roblox": usuario_roblox,
             "metodo_pago":    self.metodo_pago.value.strip(),
             "notas":          self.notas.value.strip() if self.notas.value else "",
             "estado":         "abierto",
-            "creado_en":      datetime.datetime.utcnow().isoformat(),
+            "creado_en":      datetime.datetime.utcnow(),
             "pagado_por":     None,
             "entregado_por":  None,
         }
@@ -476,29 +582,24 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
             view=vista,
         )
 
-        if LOG_CHANNEL_ID:
-            log_ch = guild.get_channel(LOG_CHANNEL_ID)
-            if log_ch:
-                log_e = discord.Embed(
-                    title="📋 Ticket creado",
-                    description=(
-                        f"**Usuario:** {interaction.user}\n"
-                        f"**Canal:** {canal.mention}\n"
-                        f"**Robux:** {robux:,} | **Precio:** {precio_texto}"
-                    ),
-                    color=0x2ECC71,
-                    timestamp=datetime.datetime.utcnow(),
-                )
-                await log_ch.send(embed=log_e)
+        await log_accion(
+            guild,
+            "📋 Ticket creado",
+            (
+                f"**Usuario:** {interaction.user}\n"
+                f"**Canal:** {canal.mention}\n"
+                f"**Robux:** {robux:,} | **Precio:** {precio_texto}"
+            ),
+            0x2ECC71
+        )
 
         await interaction.response.send_message(
             f"✅ Tu ticket fue creado: {canal.mention}", ephemeral=True
         )
 
-
-# ──────────────────────────────────────────────
-#  VISTA DENTRO DEL TICKET  (4 botones)
-# ──────────────────────────────────────────────
+# ============================================================
+#  VISTA DENTRO DEL TICKET
+# ============================================================
 
 class VistaTicket(discord.ui.View):
     def __init__(self):
@@ -549,19 +650,16 @@ class VistaTicket(discord.ui.View):
         except Exception as e:
             logger.warning(f"Error editando embed del ticket: {e}")
 
-        if LOG_CHANNEL_ID:
-            log_ch = interaction.guild.get_channel(LOG_CHANNEL_ID)
-            if log_ch:
-                await log_ch.send(embed=discord.Embed(
-                    title="💳 Pago marcado",
-                    description=(
-                        f"**Canal:** {interaction.channel.mention}\n"
-                        f"**Marcado por:** {interaction.user}\n"
-                        f"**Robux:** {datos['robux']:,}"
-                    ),
-                    color=0xF39C12,
-                    timestamp=datetime.datetime.utcnow(),
-                ))
+        await log_accion(
+            interaction.guild,
+            "💳 Pago marcado",
+            (
+                f"**Canal:** {interaction.channel.mention}\n"
+                f"**Marcado por:** {interaction.user}\n"
+                f"**Robux:** {datos['robux']:,}"
+            ),
+            0xF39C12
+        )
 
     @discord.ui.button(
         label="📦 Confirmar entrega",
@@ -612,20 +710,17 @@ class VistaTicket(discord.ui.View):
         except Exception as e:
             logger.warning(f"Error editando embed del ticket: {e}")
 
-        if LOG_CHANNEL_ID:
-            log_ch = interaction.guild.get_channel(LOG_CHANNEL_ID)
-            if log_ch:
-                await log_ch.send(embed=discord.Embed(
-                    title="✅ Robux entregados",
-                    description=(
-                        f"**Canal:** {interaction.channel.mention}\n"
-                        f"**Staff:** {interaction.user}\n"
-                        f"**Robux:** {datos['robux']:,}\n"
-                        f"**Roblox:** {datos['usuario_roblox']}"
-                    ),
-                    color=0x2ECC71,
-                    timestamp=datetime.datetime.utcnow(),
-                ))
+        await log_accion(
+            interaction.guild,
+            "✅ Robux entregados",
+            (
+                f"**Canal:** {interaction.channel.mention}\n"
+                f"**Staff:** {interaction.user}\n"
+                f"**Robux:** {datos['robux']:,}\n"
+                f"**Roblox:** {datos['usuario_roblox']}"
+            ),
+            0x2ECC71
+        )
 
     @discord.ui.button(
         label="🔒 Cerrar ticket",
@@ -645,18 +740,16 @@ class VistaTicket(discord.ui.View):
 
         await interaction.response.send_message("🔒 Cerrando ticket en **5 segundos**…")
 
-        if LOG_CHANNEL_ID:
-            log_ch = interaction.guild.get_channel(LOG_CHANNEL_ID)
-            if log_ch:
-                desc = f"**Canal:** {interaction.channel.name}\n**Cerrado por:** {interaction.user}"
-                if datos:
-                    desc += f"\n**Robux:** {datos.get('robux', 0):,}"
-                await log_ch.send(embed=discord.Embed(
-                    title="🔒 Ticket cerrado",
-                    description=desc,
-                    color=0xE74C3C,
-                    timestamp=datetime.datetime.utcnow(),
-                ))
+        await log_accion(
+            interaction.guild,
+            "🔒 Ticket cerrado",
+            (
+                f"**Canal:** {interaction.channel.name}\n"
+                f"**Cerrado por:** {interaction.user}\n"
+                f"**Robux:** {datos.get('robux', 0):,}" if datos else ""
+            ),
+            0xE74C3C
+        )
 
         await asyncio.sleep(5)
         tickets_activos.pop(interaction.channel_id, None)
@@ -696,10 +789,9 @@ class VistaTicket(discord.ui.View):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-
-# ──────────────────────────────────────────────
+# ============================================================
 #  VISTA DEL PANEL PRINCIPAL
-# ──────────────────────────────────────────────
+# ============================================================
 
 class VistaPanelPrincipal(discord.ui.View):
     def __init__(self):
@@ -767,10 +859,9 @@ class VistaPanelPrincipal(discord.ui.View):
         embed.add_field(name="¿Es seguro?",               value="Si, nuestro staff verificado gestiona cada transaccion manualmente.", inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-
-# ──────────────────────────────────────────────
-#  PANEL 2 — SISTEMA DE AUTOROLES
-# ──────────────────────────────────────────────
+# ============================================================
+#  PANEL DE AUTOROLES
+# ============================================================
 
 class ModalAgregarRol(discord.ui.Modal, title="➕ Agregar Autorol"):
     role_id_input = discord.ui.TextInput(
@@ -803,7 +894,6 @@ class ModalAgregarRol(discord.ui.Modal, title="➕ Agregar Autorol"):
         guardar_datos()
         await interaction.response.send_message(f"✅ Rol **{role.name}** agregado a los autoroles correctamente.", ephemeral=True)
 
-
 class VistaAutorolSelect(discord.ui.View):
     def __init__(self, roles_disponibles: list):
         super().__init__(timeout=120)
@@ -825,6 +915,14 @@ class VistaAutorolSelect(discord.ui.View):
             await interaction.response.send_message("❌ No se encontro el rol. Puede que haya sido eliminado.", ephemeral=True)
             return
 
+        # Verificar jerarquía de roles
+        if role >= interaction.guild.me.top_role:
+            await interaction.response.send_message(
+                "❌ No puedo asignar ese rol porque está por encima del mío en la jerarquía.",
+                ephemeral=True
+            )
+            return
+
         try:
             if role in interaction.user.roles:
                 await interaction.user.remove_roles(role, reason="Autorol quitado")
@@ -836,7 +934,6 @@ class VistaAutorolSelect(discord.ui.View):
             await interaction.response.send_message(
                 "❌ No tengo permisos para asignar ese rol. Asegurate de que mi rol este por encima.", ephemeral=True
             )
-
 
 class VistaPanelAutoroles(discord.ui.View):
     def __init__(self):
@@ -879,10 +976,27 @@ class VistaPanelAutoroles(discord.ui.View):
         vista = VistaAutorolSelect(roles_validos)
         await interaction.response.send_message(embed=embed, view=vista, ephemeral=True)
 
+# ============================================================
+#  VISTA DE GRUPOS DE ROBLOX
+# ============================================================
 
-# ──────────────────────────────────────────────
+class VistaGruposRoblox(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        
+        # Agregar un botón por cada grupo
+        for grupo in GRUPOS_ROBLOX:
+            boton = discord.ui.Button(
+                label=grupo['nombre'],
+                emoji=grupo['emoji'],
+                url=grupo['url'],
+                style=discord.ButtonStyle.link
+            )
+            self.add_item(boton)
+
+# ============================================================
 #  COMANDOS SLASH
-# ──────────────────────────────────────────────
+# ============================================================
 
 @tree.command(
     name="panel",
@@ -908,7 +1022,6 @@ async def cmd_panel(interaction: discord.Interaction):
     await interaction.channel.send(embed=embed, view=VistaPanelPrincipal())
     await interaction.response.send_message("✅ Panel enviado.", ephemeral=True)
 
-
 @tree.command(
     name="panel2",
     description="🛡️ Envia el panel de autoroles",
@@ -927,7 +1040,6 @@ async def cmd_panel2(interaction: discord.Interaction):
     )
     await interaction.channel.send(embed=embed, view=VistaPanelAutoroles())
     await interaction.response.send_message("✅ Panel de autoroles enviado.", ephemeral=True)
-
 
 @tree.command(
     name="precio",
@@ -949,7 +1061,11 @@ async def cmd_precio(interaction: discord.Interaction, robux: int, pais: str):
         return
 
     info = TASAS_CAMBIO[codigo]
-    precio_local, precio_texto, usd = await calcular_precio(robux, codigo)
+    try:
+        precio_local, precio_texto, usd = await calcular_precio(robux, codigo)
+    except ValueError as e:
+        await interaction.response.send_message(f"❌ {e}", ephemeral=True)
+        return
 
     rates       = await obtener_tasas_live()
     moneda_code = info["moneda"]
@@ -971,7 +1087,6 @@ async def cmd_precio(interaction: discord.Interaction, robux: int, pais: str):
         inline=True,
     )
     await interaction.response.send_message(embed=embed)
-
 
 @tree.command(
     name="tickets",
@@ -1003,7 +1118,6 @@ async def cmd_tickets(interaction: discord.Interaction):
         )
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-
 @tree.command(
     name="cerrar",
     description="🔒 Cierra el ticket actual",
@@ -1018,18 +1132,16 @@ async def cmd_cerrar(interaction: discord.Interaction):
     await interaction.response.send_message("🔒 Cerrando en 5 segundos…")
 
     datos = tickets_activos.get(interaction.channel_id, {})
-    if LOG_CHANNEL_ID:
-        log_ch = interaction.guild.get_channel(LOG_CHANNEL_ID)
-        if log_ch:
-            desc = f"**Canal:** {interaction.channel.name}\n**Cerrado por:** {interaction.user}"
-            if datos:
-                desc += f"\n**Robux:** {datos.get('robux', 0):,}"
-            await log_ch.send(embed=discord.Embed(
-                title="🔒 Ticket cerrado",
-                description=desc,
-                color=0xE74C3C,
-                timestamp=datetime.datetime.utcnow(),
-            ))
+    await log_accion(
+        interaction.guild,
+        "🔒 Ticket cerrado",
+        (
+            f"**Canal:** {interaction.channel.name}\n"
+            f"**Cerrado por:** {interaction.user}\n"
+            f"**Robux:** {datos.get('robux', 0):,}" if datos else ""
+        ),
+        0xE74C3C
+    )
 
     await asyncio.sleep(5)
     tickets_activos.pop(interaction.channel_id, None)
@@ -1038,7 +1150,6 @@ async def cmd_cerrar(interaction: discord.Interaction):
         await interaction.channel.delete(reason=f"Cerrado por {interaction.user}")
     except discord.Forbidden:
         await interaction.followup.send("❌ No tengo permisos para eliminar el canal.", ephemeral=True)
-
 
 @tree.command(
     name="send",
@@ -1055,8 +1166,6 @@ async def cmd_send(interaction: discord.Interaction):
     )
     await interaction.channel.send(embed=embed)
     await interaction.followup.send("✅ Tabla enviada.", ephemeral=True)
-
-
 
 @tree.command(
     name="send2",
@@ -1084,9 +1193,114 @@ async def cmd_send2(interaction: discord.Interaction):
     await interaction.channel.send(embed=embed)
     await interaction.response.send_message("✅ Metodos de pago enviados.", ephemeral=True)
 
-# ──────────────────────────────────────────────
+@tree.command(
+    name="send3",
+    description="🎮 Envia el embed con los grupos de Roblox al canal",
+    guild=guild_obj(),
+)
+@app_commands.check(es_admin_o_owner)
+async def cmd_send3(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🎮 Únete a Nuestros Grupos de Roblox",
+        description=(
+            "**¡Únete a nuestras comunidades exclusivas!**\n\n"
+            "✨ Contenido premium y eventos especiales\n"
+            "🎁 Recompensas y sorteos frecuentes\n"
+            "🤝 Comunidad activa y amigable\n"
+            "📢 Anuncios y actualizaciones prioritarias\n\u200b"
+        ),
+        color=0xE74C3C,
+        timestamp=datetime.datetime.utcnow()
+    )
+    
+    # Agregar cada grupo como un campo
+    for grupo in GRUPOS_ROBLOX:
+        embed.add_field(
+            name=f"{grupo['emoji']} {grupo['nombre']}",
+            value=f"[🔗 Unirse al grupo]({grupo['url']})\n*{grupo['descripcion']}*",
+            inline=False
+        )
+    
+    embed.set_thumbnail(
+        url="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Roblox_Logo_2022.svg/512px-Roblox_Logo_2022.svg.png"
+    )
+    
+    embed.set_footer(
+        text="¡Haz clic en los botones para unirte! • Roblox Communities",
+        icon_url="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Roblox_Logo_2022.svg/512px-Roblox_Logo_2022.svg.png"
+    )
+    
+    # Enviar con vista de botones
+    vista = VistaGruposRoblox()
+    await interaction.channel.send(embed=embed, view=vista)
+    await interaction.response.send_message("✅ Grupos de Roblox enviados con botones.", ephemeral=True)
+
+@tree.command(
+    name="stats",
+    description="📊 Estadísticas del bot (solo staff)",
+    guild=guild_obj(),
+)
+@app_commands.check(es_admin_o_owner)
+async def cmd_stats(interaction: discord.Interaction):
+    total_tickets = len(tickets_activos)
+    tickets_abiertos = sum(1 for t in tickets_activos.values() if t.get("estado") == "abierto")
+    tickets_pendientes = sum(1 for t in tickets_activos.values() if t.get("estado") == "pendiente")
+    tickets_entregados = sum(1 for t in tickets_activos.values() if t.get("estado") == "entregado")
+    
+    total_robux = sum(t.get("robux", 0) for t in tickets_activos.values())
+    
+    embed = discord.Embed(title="📊 Estadísticas del Bot", color=0x3498DB)
+    embed.add_field(name="Tickets Totales", value=str(total_tickets), inline=True)
+    embed.add_field(name="🟢 Abiertos", value=str(tickets_abiertos), inline=True)
+    embed.add_field(name="🟡 Pendientes", value=str(tickets_pendientes), inline=True)
+    embed.add_field(name="✅ Entregados", value=str(tickets_entregados), inline=True)
+    embed.add_field(name="💎 Robux Totales", value=f"{total_robux:,} R$", inline=True)
+    embed.add_field(name="🎫 Contador", value=str(ticket_counter), inline=True)
+    embed.add_field(name="🎭 Autoroles", value=str(len(autoroles_registrados)), inline=True)
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@tree.command(
+    name="cleanup",
+    description="🧹 Elimina tickets cerrados antiguos (solo admins)",
+    guild=guild_obj(),
+)
+@app_commands.describe(dias="Días de antigüedad mínima (default: 7)")
+@app_commands.check(es_admin_o_owner)
+async def cmd_cleanup(interaction: discord.Interaction, dias: int = 7):
+    await interaction.response.defer(ephemeral=True)
+    
+    eliminados = 0
+    ahora = datetime.datetime.utcnow()
+    
+    for canal_id, datos in list(tickets_activos.items()):
+        if datos.get("estado") == "cerrado":
+            creado = datos.get("creado_en")
+            if isinstance(creado, str):
+                try:
+                    creado = datetime.datetime.fromisoformat(creado)
+                except:
+                    creado = ahora
+            
+            if (ahora - creado).days > dias:
+                canal = interaction.guild.get_channel(canal_id)
+                if canal:
+                    try:
+                        await canal.delete(reason="Cleanup automático")
+                        eliminados += 1
+                    except:
+                        pass
+                tickets_activos.pop(canal_id, None)
+    
+    guardar_datos()
+    await interaction.followup.send(
+        f"✅ Limpieza completada. {eliminados} tickets eliminados.",
+        ephemeral=True
+    )
+
+# ============================================================
 #  EVENTOS
-# ──────────────────────────────────────────────
+# ============================================================
 
 @bot.event
 async def on_ready():
@@ -1095,6 +1309,7 @@ async def on_ready():
     bot.add_view(VistaPanelPrincipal())
     bot.add_view(VistaTicket())
     bot.add_view(VistaPanelAutoroles())
+    bot.add_view(VistaGruposRoblox())
 
     try:
         if GUILD_ID:
@@ -1110,7 +1325,9 @@ async def on_ready():
         await obtener_tasas_live()
     except Exception as e:
         logger.warning(f"⚠️ No se pudieron cargar tasas live: {e}")
-
+    
+    # Iniciar backup automático
+    bot.loop.create_task(backup_automatico())
 
 @bot.event
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
@@ -1127,10 +1344,9 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     except Exception:
         pass
 
-
-# ──────────────────────────────────────────────
+# ============================================================
 #  ARRANQUE
-# ──────────────────────────────────────────────
+# ============================================================
 keep_alive()
 
 if not BOT_TOKEN:
