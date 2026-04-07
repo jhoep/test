@@ -1200,42 +1200,41 @@ async def cmd_send2(interaction: discord.Interaction):
 )
 @app_commands.check(es_admin_o_owner)
 async def cmd_send3(interaction: discord.Interaction):
-    
     embed = discord.Embed(
-        title="🎮 Grupos de Roblox",
-        description="Haz clic en los botones de abajo para unirte 👇",
+        title="🎮 Únete a Nuestros Grupos de Roblox",
+        description=(
+            "**¡Únete a nuestras comunidades exclusivas!**\n\n"
+            "✨ Contenido premium y eventos especiales\n"
+            "🎁 Recompensas y sorteos frecuentes\n"
+            "🤝 Comunidad activa y amigable\n"
+            "📢 Anuncios y actualizaciones prioritarias\n\u200b"
+        ),
         color=0xE74C3C,
         timestamp=datetime.datetime.utcnow()
     )
     
-    # Lista de grupos ARRIBA
-    lista_grupos = ""
+    # Agregar cada grupo como un campo
     for grupo in GRUPOS_ROBLOX:
-        lista_grupos += f"{grupo['emoji']} **{grupo['nombre']}**\n"
+        embed.add_field(
+            name=f"{grupo['emoji']} {grupo['nombre']}",
+            value=f"[🔗 Unirse al grupo]({grupo['url']})\n*{grupo['descripcion']}*",
+            inline=False
+        )
     
-    embed.add_field(
-        name="📋 Comunidades disponibles",
-        value=lista_grupos,
-        inline=False
-    )
-    
-    # Imagen lateral
     embed.set_thumbnail(
         url="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Roblox_Logo_2022.svg/512px-Roblox_Logo_2022.svg.png"
     )
     
-    # Footer limpio
     embed.set_footer(
-        text="Roblox Communities",
+        text="¡Haz clic en los botones para unirte! • Roblox Communities",
         icon_url="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Roblox_Logo_2022.svg/512px-Roblox_Logo_2022.svg.png"
     )
     
-    # Botones (NO se tocan)
+    # Enviar con vista de botones
     vista = VistaGruposRoblox()
     await interaction.channel.send(embed=embed, view=vista)
-    
-    await interaction.response.send_message("✅ Grupos enviados.", ephemeral=True)
-    
+    await interaction.response.send_message("✅ Grupos de Roblox enviados con botones.", ephemeral=True)
+
 @tree.command(
     name="stats",
     description="📊 Estadísticas del bot (solo staff)",
