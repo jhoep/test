@@ -98,7 +98,7 @@ TASAS_CAMBIO = {
     "MX": {"nombre": "Mexico",         "moneda": "MXN", "simbolo": "$",   "tasa": 19.46},
     "AR": {"nombre": "Argentina",      "moneda": "ARS", "simbolo": "$",   "tasa": 1900.0},
     "CO": {"nombre": "Colombia",       "moneda": "COP", "simbolo": "$",   "tasa": 4200.0},
-    "CL": {"nombre": "Chile",          "moneda": "CLP", "simbolo": "$",   "tasa": 930.0},
+    "CL": {"nombre": "Chile",          "moneda": "CLP", "simbolo": "$",   "tasa": 4200.0},
     "PE": {"nombre": "Peru",           "moneda": "PEN", "simbolo": "S/",  "tasa": 3.75},
     "VE": {"nombre": "Venezuela",      "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
     "EC": {"nombre": "Ecuador",        "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
@@ -307,7 +307,7 @@ async def construir_embed_tabla(titulo: str, descripcion: str, color: int) -> di
         info_p = TASAS_CAMBIO[codigo]
         moneda = info_p["moneda"]
         # Para MX y CO usamos siempre la tasa fija (precios fijados por el vendedor)
-        if codigo in ("MX", "CO", "AR"):
+        if codigo in ("MX", "CO", "AR", "CL"):
             tasa = info_p["tasa"]
         else:
             tasa = rates.get(moneda, info_p["tasa"]) if rates else info_p["tasa"]
@@ -738,14 +738,14 @@ class VistaPanelPrincipal(discord.ui.View):
         embed = discord.Embed(
             title="💳 Metodos de Pago Disponibles",
             description=(
-                "🪙 **Crypto**\n"
-                "💸 **CashApp**\n"
-                "🅿️ **PayPal**\n"
-                "📱 **Nequi**\n"
+                "<:crypto:1354333736539525211> **Crypto**\n"
+                "<:cashapp:1374105112930422804> **CashApp**\n"
+                "<:paypal:1354334198751821875> **PayPal**\n"
+                "<:nequi:1374103599885586452> **Nequi**\n"
                 "🏦 **Transferencia**\n"
-                "📲 **Yape**\n"
-                "🏦 **Bancolombia**\n"
-                "🏪 **OXXO**\n"
+                "<:yape:1387915801390219468> **Yape**\n"
+                "<:bancolombia:1374103741313319073> **Bancolombia**\n"
+                "<:oxxo:1374105071415201944> **OXXO**\n"
                 "🏦 **Transferencia Mexicana**\n"
                 "🛒 **MercadoPago**"
             ),
@@ -1068,14 +1068,14 @@ async def cmd_send2(interaction: discord.Interaction):
     embed = discord.Embed(
         title="💳 Metodos de Pago Disponibles",
         description=(
-            "🪙 **Crypto**\n"
-            "💸 **CashApp**\n"
-            "🅿️ **PayPal**\n"
-            "📱 **Nequi**\n"
+            "<:crypto:1354333736539525211> **Crypto**\n"
+            "<:cashapp:1374105112930422804> **CashApp**\n"
+            "<:paypal:1354334198751821875> **PayPal**\n"
+            "<:nequi:1374103599885586452> **Nequi**\n"
             "🏦 **Transferencia**\n"
-            "📲 **Yape**\n"
-            "🏦 **Bancolombia**\n"
-            "🏪 **OXXO**\n"
+            "<:yape:1387915801390219468> **Yape**\n"
+            "<:bancolombia:1374103741313319073> **Bancolombia**\n"
+            "<:oxxo:1374105071415201944> **OXXO**\n"
             "🏦 **Transferencia Mexicana**\n"
             "🛒 **MercadoPago**"
         ),
