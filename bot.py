@@ -86,7 +86,7 @@ async def obtener_tasas_live():
 
 TASAS_CAMBIO = {
     "MX": {"nombre": "Mexico",         "moneda": "MXN", "simbolo": "$",   "tasa": 19.46},
-    "AR": {"nombre": "Argentina",      "moneda": "ARS", "simbolo": "$",   "tasa": 900.0},
+    "AR": {"nombre": "Argentina",      "moneda": "ARS", "simbolo": "$",   "tasa": 1900.0},
     "CO": {"nombre": "Colombia",       "moneda": "COP", "simbolo": "$",   "tasa": 4200.0},
     "CL": {"nombre": "Chile",          "moneda": "CLP", "simbolo": "$",   "tasa": 930.0},
     "PE": {"nombre": "Peru",           "moneda": "PEN", "simbolo": "S/",  "tasa": 3.75},
@@ -297,7 +297,7 @@ async def construir_embed_tabla(titulo: str, descripcion: str, color: int) -> di
         info_p = TASAS_CAMBIO[codigo]
         moneda = info_p["moneda"]
         # Para MX y CO usamos siempre la tasa fija (precios fijados por el vendedor)
-        if codigo in ("MX", "CO"):
+        if codigo in ("MX", "CO", "AR"):
             tasa = info_p["tasa"]
         else:
             tasa = rates.get(moneda, info_p["tasa"]) if rates else info_p["tasa"]
