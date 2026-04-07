@@ -28,6 +28,16 @@ STAFF_ROLE_ID       = int(os.environ["STAFF_ROLE_ID"])       if os.environ.get("
 LOG_CHANNEL_ID      = int(os.environ["LOG_CHANNEL_ID"])      if os.environ.get("LOG_CHANNEL_ID")      else None
 
 MAX_TICKETS_POR_USUARIO = 3
+OWNER_ID = 596764844791824417
+
+
+def es_admin_o_owner(interaction: discord.Interaction) -> bool:
+    """Devuelve True si el usuario es el owner o tiene permisos de administrador."""
+    if interaction.user.id == OWNER_ID:
+        return True
+    if isinstance(interaction.user, discord.Member):
+        return interaction.user.guild_permissions.administrator
+    return False
 
 # ============================================================
 #  TABLA DE PRECIOS DEL VENDEDOR
@@ -879,7 +889,7 @@ class VistaPanelAutoroles(discord.ui.View):
     description="📌 Envia el panel principal de compra de Robux",
     guild=guild_obj(),
 )
-@app_commands.checks.has_permissions(administrator=True)
+@app_commands.check(es_admin_o_owner)
 async def cmd_panel(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🎮 Tienda de Robux",
@@ -904,7 +914,7 @@ async def cmd_panel(interaction: discord.Interaction):
     description="🛡️ Envia el panel de autoroles",
     guild=guild_obj(),
 )
-@app_commands.checks.has_permissions(administrator=True)
+@app_commands.check(es_admin_o_owner)
 async def cmd_panel2(interaction: discord.Interaction):
     embed = discord.Embed(
         title="Panel de Autoroles",
@@ -968,7 +978,7 @@ async def cmd_precio(interaction: discord.Interaction, robux: int, pais: str):
     description="📋 Lista los tickets activos (solo staff)",
     guild=guild_obj(),
 )
-@app_commands.checks.has_permissions(manage_channels=True)
+@app_commands.check(es_admin_o_owner)
 async def cmd_tickets(interaction: discord.Interaction):
     activos = {
         k: v for k, v in tickets_activos.items()
@@ -999,7 +1009,7 @@ async def cmd_tickets(interaction: discord.Interaction):
     description="🔒 Cierra el ticket actual",
     guild=guild_obj(),
 )
-@app_commands.checks.has_permissions(manage_channels=True)
+@app_commands.check(es_admin_o_owner)
 async def cmd_cerrar(interaction: discord.Interaction):
     if interaction.channel_id not in tickets_activos:
         await interaction.response.send_message("❌ Este canal no es un ticket.", ephemeral=True)
@@ -1035,7 +1045,7 @@ async def cmd_cerrar(interaction: discord.Interaction):
     description="📊 Envia la tabla de precios de Robux al canal (solo staff)",
     guild=guild_obj(),
 )
-@app_commands.checks.has_permissions(administrator=True)
+@app_commands.check(es_admin_o_owner)
 async def cmd_send(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     embed = await construir_embed_tabla(
@@ -1046,6 +1056,33 @@ async def cmd_send(interaction: discord.Interaction):
     await interaction.channel.send(embed=embed)
     await interaction.followup.send("✅ Tabla enviada.", ephemeral=True)
 
+
+
+@tree.command(
+    name="send2",
+    description="💳 Envia el embed de metodos de pago al canal",
+    guild=guild_obj(),
+)
+@app_commands.check(es_admin_o_owner)
+async def cmd_send2(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="💳 Metodos de Pago Disponibles",
+        description=(
+            "🪙 **Crypto**\n"
+            "💸 **CashApp**\n"
+            "🅿️ **PayPal**\n"
+            "📱 **Nequi**\n"
+            "🏦 **Transferencia**\n"
+            "📲 **Yape**\n"
+            "🏦 **Bancolombia**\n"
+            "🏪 **OXXO**\n"
+            "🏦 **Transferencia Mexicana**\n"
+            "🛒 **MercadoPago**"
+        ),
+        color=0x2ECC71,
+    )
+    await interaction.channel.send(embed=embed)
+    await interaction.response.send_message("✅ Metodos de pago enviados.", ephemeral=True)
 
 # ──────────────────────────────────────────────
 #  EVENTOS
@@ -1077,7 +1114,7 @@ async def on_ready():
 
 @bot.event
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    if isinstance(error, app_commands.MissingPermissions):
+    if isinstance(error, (app_commands.MissingPermissions, app_commands.CheckFailure)):
         msg = "❌ No tienes permisos para usar este comando."
     else:
         msg = f"❌ Error: {error}"
