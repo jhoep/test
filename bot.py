@@ -20,22 +20,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("robux-bot")
 
-# ============================================================
-#  CONFIGURACION — variables de entorno (Render.com)
-#
-#  Variables requeridas:
-#    BOT_TOKEN           — token del bot de Discord
-#
-#  Variables opcionales:
-#    GUILD_ID            — ID del servidor. Si se omite, los comandos
-#                          se sincronizan globalmente (tarda ~1 hora).
-#    CATEGORY_TICKETS_ID — ID de la categoria donde se crean tickets
-#    STAFF_ROLE_ID       — ID del rol de staff
-#    LOG_CHANNEL_ID      — ID del canal de logs
-# ============================================================
 BOT_TOKEN           = os.environ.get("BOT_TOKEN", "")
 _GUILD_ID_RAW       = os.environ.get("GUILD_ID", "").strip()
-GUILD_ID            = int(_GUILD_ID_RAW) if _GUILD_ID_RAW else None   # None = sync global
+GUILD_ID            = int(_GUILD_ID_RAW) if _GUILD_ID_RAW else None
 CATEGORY_TICKETS_ID = int(os.environ["CATEGORY_TICKETS_ID"]) if os.environ.get("CATEGORY_TICKETS_ID") else None
 STAFF_ROLE_ID       = int(os.environ["STAFF_ROLE_ID"])       if os.environ.get("STAFF_ROLE_ID")       else None
 LOG_CHANNEL_ID      = int(os.environ["LOG_CHANNEL_ID"])      if os.environ.get("LOG_CHANNEL_ID")      else None
@@ -98,9 +85,9 @@ async def obtener_tasas_live():
 
 
 TASAS_CAMBIO = {
-    "MX": {"nombre": "Mexico",         "moneda": "MXN", "simbolo": "$",   "tasa": 17.50},
+    "MX": {"nombre": "Mexico",         "moneda": "MXN", "simbolo": "$",   "tasa": 19.46},
     "AR": {"nombre": "Argentina",      "moneda": "ARS", "simbolo": "$",   "tasa": 900.0},
-    "CO": {"nombre": "Colombia",       "moneda": "COP", "simbolo": "$",   "tasa": 4000.0},
+    "CO": {"nombre": "Colombia",       "moneda": "COP", "simbolo": "$",   "tasa": 4200.0},
     "CL": {"nombre": "Chile",          "moneda": "CLP", "simbolo": "$",   "tasa": 930.0},
     "PE": {"nombre": "Peru",           "moneda": "PEN", "simbolo": "S/",  "tasa": 3.75},
     "VE": {"nombre": "Venezuela",      "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
@@ -178,18 +165,9 @@ intents.guilds = True
 bot  = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
 
-# ============================================================
-#  HELPER — guild object o None (para comandos y sync)
-# ============================================================
 
 def guild_obj() -> Optional[discord.Object]:
-    """Devuelve discord.Object(GUILD_ID) si hay guild, o None para global."""
     return discord.Object(id=GUILD_ID) if GUILD_ID else None
-
-
-def registrar_comando(guild: Optional[discord.Object] = None):
-    """Decorador que registra un comando en el guild o globalmente."""
-    return guild
 
 
 # ============================================================
@@ -298,7 +276,8 @@ def crear_embed_ticket(datos: dict) -> discord.Embed:
 async def construir_embed_tabla(titulo: str, descripcion: str, color: int) -> discord.Embed:
     rates  = await obtener_tasas_live()
 
-    cantidades = list(PRECIOS_ROBUX.keys()) + [40_000, 50_000]
+    # Solo hasta 30,000 Robux
+    cantidades = list(PRECIOS_ROBUX.keys())  # 1k..30k
 
     embed = discord.Embed(
         title=titulo,
@@ -317,7 +296,11 @@ async def construir_embed_tabla(titulo: str, descripcion: str, color: int) -> di
     for codigo in ["MX", "AR", "CO", "CL", "ES"]:
         info_p = TASAS_CAMBIO[codigo]
         moneda = info_p["moneda"]
-        tasa   = rates.get(moneda, info_p["tasa"]) if rates else info_p["tasa"]
+        # Para MX y CO usamos siempre la tasa fija (precios fijados por el vendedor)
+        if codigo in ("MX", "CO"):
+            tasa = info_p["tasa"]
+        else:
+            tasa = rates.get(moneda, info_p["tasa"]) if rates else info_p["tasa"]
         col = ""
         for r in cantidades:
             local = precio_usd_aproximado(r) * tasa
@@ -328,7 +311,6 @@ async def construir_embed_tabla(titulo: str, descripcion: str, color: int) -> di
             inline=True,
         )
 
-    embed.set_footer(text="💡 $0.005 USD por Robux • FX actualizado cada hora")
     return embed
 
 
@@ -385,9 +367,9 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
                 ephemeral=True,
             )
             return
-        if robux > 50_000:
+        if robux > 30_000:
             await interaction.response.send_message(
-                "❌ La cantidad maxima es **50,000 Robux** por ticket.",
+                "❌ La cantidad maxima es **30,000 Robux** por ticket.",
                 ephemeral=True,
             )
             return
@@ -890,8 +872,6 @@ class VistaPanelAutoroles(discord.ui.View):
 
 # ──────────────────────────────────────────────
 #  COMANDOS SLASH
-#  Si GUILD_ID está definido → se registran en ese guild (instantáneo)
-#  Si GUILD_ID es None       → se registran globalmente (tarda ~1 hora)
 # ──────────────────────────────────────────────
 
 @tree.command(
@@ -954,8 +934,8 @@ async def cmd_precio(interaction: discord.Interaction, robux: int, pais: str):
             ephemeral=True,
         )
         return
-    if robux <= 0 or robux > 50_000:
-        await interaction.response.send_message("❌ La cantidad debe ser entre 1 y 50,000 Robux.", ephemeral=True)
+    if robux <= 0 or robux > 30_000:
+        await interaction.response.send_message("❌ La cantidad debe ser entre 1 y 30,000 Robux.", ephemeral=True)
         return
 
     info = TASAS_CAMBIO[codigo]
@@ -980,7 +960,6 @@ async def cmd_precio(interaction: discord.Interaction, robux: int, pais: str):
         value=f"1 USD = {tasa_usada:,.4f} {moneda_code}\n*{fuente_tasa}*",
         inline=True,
     )
-    embed.set_footer(text="💡 $0.005 USD por Robux • FX actualizado cada hora")
     await interaction.response.send_message(embed=embed)
 
 
@@ -1082,11 +1061,9 @@ async def on_ready():
 
     try:
         if GUILD_ID:
-            # Sync solo en el guild → instantáneo
             synced = await tree.sync(guild=discord.Object(id=GUILD_ID))
             logger.info(f"✅ Bot listo: {bot.user} | {len(synced)} comandos sincronizados en guild {GUILD_ID}")
         else:
-            # Sync global → disponible en todos los servidores (~1 hora)
             synced = await tree.sync()
             logger.info(f"✅ Bot listo: {bot.user} | {len(synced)} comandos sincronizados GLOBALMENTE")
     except Exception as e:
