@@ -105,7 +105,7 @@ TASAS_CAMBIO = {
     "PY": {"nombre": "Paraguay",       "moneda": "PYG", "simbolo": "₲",   "tasa": 7300.0},
     "UY": {"nombre": "Uruguay",        "moneda": "UYU", "simbolo": "$",   "tasa": 38.50},
     "BR": {"nombre": "Brasil",         "moneda": "BRL", "simbolo": "R$",  "tasa": 5.00},
-    "ES": {"nombre": "España",         "moneda": "EUR", "simbolo": "€",   "tasa": 0.92},
+    "ES": {"nombre": "España",         "moneda": "EUR", "simbolo": "€",   "tasa": 0.86},
     "US": {"nombre": "Estados Unidos", "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
     "GT": {"nombre": "Guatemala",      "moneda": "GTQ", "simbolo": "Q",   "tasa": 7.80},
     "SV": {"nombre": "El Salvador",    "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
@@ -1180,7 +1180,6 @@ async def cmd_send3(interaction: discord.Interaction):
         color=0xE74C3C,
     )
     
-    # Agregar cada grupo
     grupos_texto = ""
     for grupo in GRUPOS_ROBLOX:
         grupos_texto += f"**[{grupo['nombre']}]({grupo['url']})**\n"
