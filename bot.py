@@ -283,8 +283,7 @@ async def calcular_precio(robux: int, codigo_pais: str) -> Tuple[Optional[float]
         raise ValueError(f"País {codigo_pais} no soportado")
     
     usd   = precio_usd_aproximado(robux)
-    rates = await obtener_tasas_live()
-    tasa  = rates.get(info["moneda"], info["tasa"]) if rates else info["tasa"]
+    tasa  = info["tasa"]  # Siempre usar tasa fija del vendedor
     local = usd * tasa
     texto = f"{info['simbolo']}{local:,.2f} {info['moneda']}"
     return local, texto, usd
@@ -373,7 +372,7 @@ async def construir_embed_tabla(titulo: str, descripcion: str, color: int) -> di
     for codigo in ["MX", "AR", "CO", "ES"]:
         info_p = TASAS_CAMBIO[codigo]
         moneda = info_p["moneda"]
-        tasa = info_p["tasa"] if codigo in ("MX", "CO", "AR") else rates.get(moneda, info_p["tasa"]) if rates else info_p["tasa"]
+        tasa = info_p["tasa"]  # Siempre usar tasa fija del vendedor
         col = ""
         for r in cantidades:
             local = precio_usd_aproximado(r) * tasa
