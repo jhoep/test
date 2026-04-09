@@ -1107,8 +1107,6 @@ async def cmd_calcular_precio(interaction: discord.Interaction, robux: int, mone
         value="\n".join(lineas_desglose) or "—",
         inline=False,
     )
-    embed.set_footer(text="Precios basados en los paquetes fijos del vendedor")
-
     await interaction.followup.send(embed=embed)
 
 @tree.command(
