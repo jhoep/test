@@ -97,7 +97,7 @@ TASAS_CAMBIO = {
     "MX": {"nombre": "Mexico",         "moneda": "MXN", "simbolo": "$",   "tasa": 19.46},
     "AR": {"nombre": "Argentina",      "moneda": "ARS", "simbolo": "$",   "tasa": 1900.0},
     "CO": {"nombre": "Colombia",       "moneda": "COP", "simbolo": "$",   "tasa": 4200.0},
-    "CL": {"nombre": "Chile",          "moneda": "CLP", "simbolo": "$",   "tasa": 4200.0},
+    "CL": {"nombre": "Chile",          "moneda": "CLP", "simbolo": "$",   "tasa": 919.6},
     "PE": {"nombre": "Peru",           "moneda": "PEN", "simbolo": "S/",  "tasa": 3.75},
     "VE": {"nombre": "Venezuela",      "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
     "EC": {"nombre": "Ecuador",        "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
@@ -369,19 +369,18 @@ async def construir_embed_tabla(titulo: str, descripcion: str, color: int) -> di
         col_usd += f"✅ `{r:>6,}` → **${p:.2f}**\n"
     embed.add_field(name="💵 USD", value=col_usd, inline=True)
 
-    # Columnas monedas locales — tasa fija para MX, AR, CO; live para CL y ES
+    # Columnas monedas locales — SIEMPRE tasa fija para precios estables
     for codigo in ["MX", "AR", "CO", "CL", "ES"]:
         info_p = TASAS_CAMBIO[codigo]
         moneda = info_p["moneda"]
-        # Para EUR (ES) y CLP (CL) usar tasa live si está disponible, sino fallback
-        if rates and moneda in rates:
-            tasa = rates[moneda]
-        else:
-            tasa = info_p["tasa"]
+        tasa = info_p["tasa"]  # siempre estática
         col = ""
         for r in cantidades:
             local = precio_usd_aproximado(r) * tasa
-            col += f"`{r:>6,}` → {info_p['simbolo']}{local:,.0f}\n"
+            if moneda == "EUR":
+                col += f"`{r:>6,}` → {info_p['simbolo']}{local:,.2f}\n"
+            else:
+                col += f"`{r:>6,}` → {info_p['simbolo']}{local:,.0f}\n"
         embed.add_field(
             name=f"🌍 {info_p['nombre']} ({moneda})",
             value=col,
