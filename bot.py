@@ -1057,7 +1057,7 @@ async def cmd_calcular_precio(interaction: discord.Interaction, robux: int, mone
         await interaction.response.send_message("❌ La cantidad debe ser mayor a 0 Robux.", ephemeral=True)
         return
 
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=True)
 
     info        = TASAS_CAMBIO[codigo]
     moneda_code = info["moneda"]
