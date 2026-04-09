@@ -154,16 +154,15 @@ def cargar_datos():
     try:
         with open(DATA_FILE, "r") as f:
             data = json.load(f)
-            tickets_activos       = {}
+            tickets_activos = {}
             for k, v in data.get("tickets", {}).items():
-                # Convertir creado_en de string a datetime
                 if "creado_en" in v and isinstance(v["creado_en"], str):
                     try:
                         v["creado_en"] = datetime.datetime.fromisoformat(v["creado_en"])
                     except:
                         v["creado_en"] = datetime.datetime.utcnow()
                 tickets_activos[int(k)] = v
-            
+
             ticket_counter        = data.get("counter", 0)
             autoroles_registrados = {int(k): v for k, v in data.get("autoroles", {}).items()}
             logger.info(
@@ -189,21 +188,18 @@ def guardar_datos():
             if "creado_en" in copia and isinstance(copia["creado_en"], datetime.datetime):
                 copia["creado_en"] = copia["creado_en"].isoformat()
             data["tickets"][str(k)] = copia
-        
-        # Escribir a archivo temporal primero
+
         temp_file = DATA_FILE + ".tmp"
         with open(temp_file, "w") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
             f.flush()
             os.fsync(f.fileno())
-        
-        # Reemplazar archivo original
+
         os.replace(temp_file, DATA_FILE)
         logger.debug("Datos guardados exitosamente")
-        
+
     except Exception as e:
         logger.error(f"❌ Error crítico guardando datos: {e}")
-        # Intentar guardar en archivo de emergencia
         try:
             emergency_file = f"data_emergency_{int(_time.time())}.json"
             with open(emergency_file, "w") as f:
@@ -216,20 +212,18 @@ def guardar_datos():
 #  BACKUP AUTOMÁTICO
 # ============================================================
 async def backup_automatico():
-    """Crea backup del archivo de datos cada hora"""
-    await asyncio.sleep(60)  # Esperar 1 minuto antes del primer backup
+    await asyncio.sleep(60)
     while True:
-        await asyncio.sleep(3600)  # 1 hora
+        await asyncio.sleep(3600)
         try:
             if not os.path.exists(DATA_FILE):
                 continue
-                
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+            timestamp   = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_name = f"data_backup_{timestamp}.json"
             shutil.copy2(DATA_FILE, backup_name)
             logger.info(f"✅ Backup creado: {backup_name}")
-            
-            # Mantener solo los últimos 24 backups
+
             import glob
             backups = sorted(glob.glob("data_backup_*.json"))
             if len(backups) > 24:
@@ -281,13 +275,41 @@ async def calcular_precio(robux: int, codigo_pais: str) -> Tuple[Optional[float]
     info = TASAS_CAMBIO.get(codigo_pais.upper())
     if not info:
         raise ValueError(f"País {codigo_pais} no soportado")
-    
+
     usd   = precio_usd_aproximado(robux)
     rates = await obtener_tasas_live()
     tasa  = rates.get(info["moneda"], info["tasa"]) if rates else info["tasa"]
     local = usd * tasa
     texto = f"{info['simbolo']}{local:,.2f} {info['moneda']}"
     return local, texto, usd
+
+def calcular_precio_paquetes(robux: int) -> Tuple[float, list]:
+    """
+    Descompone la cantidad de Robux en paquetes óptimos usando los precios fijos.
+    Devuelve (precio_usd_total, desglose_lista).
+    Ejemplo: 100_000 R$ → [3×30k, 1×10k] = $500 USD
+    """
+    restantes = robux
+    total_usd = 0.0
+    desglose  = []
+
+    for cantidad in reversed(CANTIDADES_DISPONIBLES):   # de mayor a menor
+        if restantes <= 0:
+            break
+        veces = restantes // cantidad
+        if veces > 0:
+            precio_paquete = PRECIOS_ROBUX[cantidad]
+            total_usd     += veces * precio_paquete
+            desglose.append((veces, cantidad, precio_paquete))
+            restantes     -= veces * cantidad
+
+    # Si queda residuo menor al paquete más pequeño (1k), se cobra por tasa lineal
+    if restantes > 0:
+        extra = round(restantes * TASA_USD_POR_ROBUX, 2)
+        total_usd += extra
+        desglose.append((1, restantes, extra))
+
+    return round(total_usd, 2), desglose
 
 def opciones_paises():
     return [
@@ -353,7 +375,7 @@ def crear_embed_ticket(datos: dict) -> discord.Embed:
     return embed
 
 async def construir_embed_tabla(titulo: str, descripcion: str, color: int) -> discord.Embed:
-    rates  = await obtener_tasas_live()
+    rates     = await obtener_tasas_live()
     cantidades = list(PRECIOS_ROBUX.keys())
 
     embed = discord.Embed(
@@ -362,19 +384,17 @@ async def construir_embed_tabla(titulo: str, descripcion: str, color: int) -> di
         color=color,
     )
 
-    # Columna USD
     col_usd = ""
     for r in cantidades:
         p = precio_usd_aproximado(r)
         col_usd += f"✅ `{r:>6,}` → **${p:.2f}**\n"
     embed.add_field(name="💵 USD", value=col_usd, inline=True)
 
-    # Columnas monedas locales — SIEMPRE tasa fija para precios estables
     for codigo in ["MX", "AR", "CO", "CL", "ES"]:
         info_p = TASAS_CAMBIO[codigo]
         moneda = info_p["moneda"]
-        tasa = info_p["tasa"]  # siempre estática
-        col = ""
+        tasa   = info_p["tasa"]
+        col    = ""
         for r in cantidades:
             local = precio_usd_aproximado(r) * tasa
             if moneda == "EUR":
@@ -390,21 +410,17 @@ async def construir_embed_tabla(titulo: str, descripcion: str, color: int) -> di
     return embed
 
 async def log_accion(guild: discord.Guild, tipo: str, descripcion: str, color: int):
-    """Función centralizada para logs"""
     if not LOG_CHANNEL_ID:
         return
-    
     log_ch = guild.get_channel(LOG_CHANNEL_ID)
     if not log_ch:
         return
-    
     embed = discord.Embed(
         title=tipo,
         description=descripcion,
         color=color,
         timestamp=datetime.datetime.utcnow()
     )
-    
     try:
         await log_ch.send(embed=embed)
     except Exception as e:
@@ -470,7 +486,6 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
             )
             return
 
-        # Validar usuario de Roblox
         usuario_roblox = self.usuario_roblox.value.strip()
         if not usuario_roblox.replace("_", "").isalnum():
             await interaction.response.send_message(
@@ -499,12 +514,12 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
             return
 
         info_pais = TASAS_CAMBIO[codigo]
-        guild = interaction.guild
-        
+        guild     = interaction.guild
+
         async with ticket_lock:
             ticket_counter += 1
             numero = ticket_counter
-            guardar_datos()  # Guardar inmediatamente
+            guardar_datos()
 
         nombre_canal = f"ticket-{numero:04d}-{interaction.user.name.lower()[:10]}"
 
@@ -848,10 +863,10 @@ class VistaPanelPrincipal(discord.ui.View):
     )
     async def ayuda(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = discord.Embed(title="❓ Preguntas frecuentes", color=0x1ABC9C)
-        embed.add_field(name="¿Como compro Robux?",       value="Haz clic en **🎮 Comprar Robux**, completa el formulario y espera a un staff.", inline=False)
-        embed.add_field(name="¿Cuanto tiempo tarda?",     value="Normalmente entre 5 y 30 minutos segun disponibilidad del staff.", inline=False)
+        embed.add_field(name="¿Como compro Robux?",           value="Haz clic en **🎮 Comprar Robux**, completa el formulario y espera a un staff.", inline=False)
+        embed.add_field(name="¿Cuanto tiempo tarda?",         value="Normalmente entre 5 y 30 minutos segun disponibilidad del staff.", inline=False)
         embed.add_field(name="¿Que metodos de pago aceptan?", value="Crypto, CashApp, PayPal, Nequi, Bancolombia, OXXO, Transferencia, Yape, MercadoPago y mas.", inline=False)
-        embed.add_field(name="¿Es seguro?",               value="Si, nuestro staff verificado gestiona cada transaccion manualmente.", inline=False)
+        embed.add_field(name="¿Es seguro?",                   value="Si, nuestro staff verificado gestiona cada transaccion manualmente.", inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ============================================================
@@ -910,7 +925,6 @@ class VistaAutorolSelect(discord.ui.View):
             await interaction.response.send_message("❌ No se encontro el rol. Puede que haya sido eliminado.", ephemeral=True)
             return
 
-        # Verificar jerarquía de roles
         if role >= interaction.guild.me.top_role:
             await interaction.response.send_message(
                 "❌ No puedo asignar ese rol porque está por encima del mío en la jerarquía.",
@@ -934,7 +948,7 @@ class VistaPanelAutoroles(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Agregar rol",    style=discord.ButtonStyle.success, custom_id="panel2_agregar_rol")
+    @discord.ui.button(label="Agregar rol",     style=discord.ButtonStyle.success, custom_id="panel2_agregar_rol")
     async def agregar_rol(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Solo los administradores pueden agregar autoroles.", ephemeral=True)
@@ -1019,51 +1033,97 @@ async def cmd_panel2(interaction: discord.Interaction):
     await interaction.response.send_message("✅ Panel de autoroles enviado.", ephemeral=True)
 
 @tree.command(
-    name="precio",
-    description="💰 Calcula el precio de Robux en tu moneda local",
+    name="calcular_precio",
+    description="💰 Calcula el precio de cualquier cantidad de Robux en tu moneda",
     guild=guild_obj(),
 )
-@app_commands.describe(robux="Cantidad de Robux", pais="Codigo de tu pais")
-@app_commands.choices(pais=opciones_paises())
-async def cmd_precio(interaction: discord.Interaction, robux: int, pais: str):
-    codigo = pais.strip().upper()
+@app_commands.describe(
+    robux="Cantidad de Robux que deseas (ej: 100000)",
+    moneda="Selecciona tu moneda o país",
+)
+@app_commands.choices(moneda=[
+    app_commands.Choice(name=f"{v['nombre']} ({v['moneda']})", value=k)
+    for k, v in TASAS_CAMBIO.items()
+])
+async def cmd_calcular_precio(interaction: discord.Interaction, robux: int, moneda: str):
+    codigo = moneda.strip().upper()
     if codigo not in TASAS_CAMBIO:
         await interaction.response.send_message(
-            f"❌ Codigo **{codigo}** no reconocido. Usa alguno de: {', '.join(TASAS_CAMBIO.keys())}",
+            f"❌ Moneda **{codigo}** no reconocida.",
             ephemeral=True,
         )
         return
-    if robux <= 0 or robux > 30_000:
-        await interaction.response.send_message("❌ La cantidad debe ser entre 1 y 30,000 Robux.", ephemeral=True)
+    if robux <= 0:
+        await interaction.response.send_message("❌ La cantidad debe ser mayor a 0 Robux.", ephemeral=True)
         return
 
-    info = TASAS_CAMBIO[codigo]
-    try:
-        precio_local, precio_texto, usd = await calcular_precio(robux, codigo)
-    except ValueError as e:
-        await interaction.response.send_message(f"❌ {e}", ephemeral=True)
-        return
+    await interaction.response.defer()
 
-    rates       = await obtener_tasas_live()
+    info        = TASAS_CAMBIO[codigo]
     moneda_code = info["moneda"]
+    rates       = await obtener_tasas_live()
     tasa_usada  = rates.get(moneda_code, info["tasa"]) if rates else info["tasa"]
     fuente_tasa = (
         "🌐 Tasa en tiempo real"
         if (rates and moneda_code in rates)
-        else "📌 Tasa estatica (fallback)"
+        else "📌 Tasa estática (fallback)"
     )
 
-    embed = discord.Embed(title="💰 Calculadora de Robux", color=0xF39C12)
-    embed.add_field(name="🎲 Robux",        value=f"**{robux:,} R$**",   inline=True)
-    embed.add_field(name="🌍 Pais",         value=info["nombre"],        inline=True)
-    embed.add_field(name="💵 Precio USD",   value=f"**${usd:.2f}**",    inline=True)
-    embed.add_field(name="💰 Precio local", value=f"**{precio_texto}**", inline=True)
+    total_usd, desglose = calcular_precio_paquetes(robux)
+    total_local         = round(total_usd * tasa_usada, 2)
+
+    # Formatear precio local según magnitud
+    if moneda_code == "EUR":
+        precio_local_str = f"{info['simbolo']}{total_local:,.2f} {moneda_code}"
+    elif tasa_usada >= 100:
+        precio_local_str = f"{info['simbolo']}{total_local:,.0f} {moneda_code}"
+    else:
+        precio_local_str = f"{info['simbolo']}{total_local:,.2f} {moneda_code}"
+
+    # Construir desglose línea por línea
+    lineas_desglose = []
+    for veces, cantidad, precio_pkg in desglose:
+        subtotal_usd   = round(veces * precio_pkg, 2)
+        subtotal_local = round(subtotal_usd * tasa_usada, 2)
+
+        if moneda_code == "EUR":
+            local_str = f"{info['simbolo']}{subtotal_local:,.2f}"
+        elif tasa_usada >= 100:
+            local_str = f"{info['simbolo']}{subtotal_local:,.0f}"
+        else:
+            local_str = f"{info['simbolo']}{subtotal_local:,.2f}"
+
+        if cantidad in PRECIOS_ROBUX:
+            lineas_desglose.append(
+                f"`{veces}×` **{cantidad:,} R$** — ${subtotal_usd:.2f} USD / {local_str}"
+            )
+        else:
+            lineas_desglose.append(
+                f"`1×` **{cantidad:,} R$** *(residuo)* — ${subtotal_usd:.2f} USD / {local_str}"
+            )
+
+    embed = discord.Embed(
+        title="💰 Calculadora de Robux",
+        description=f"Precio para **{robux:,} R$** pagando en **{info['nombre']}**",
+        color=0xF39C12,
+    )
+    embed.add_field(name="🎲 Robux solicitados", value=f"**{robux:,} R$**",      inline=True)
+    embed.add_field(name="🌍 Moneda",            value=f"**{moneda_code}**",      inline=True)
+    embed.add_field(name="💵 Total USD",         value=f"**${total_usd:,.2f}**",  inline=True)
+    embed.add_field(name="💰 Total local",       value=f"**{precio_local_str}**", inline=True)
     embed.add_field(
         name="📈 Tasa usada",
         value=f"1 USD = {tasa_usada:,.4f} {moneda_code}\n*{fuente_tasa}*",
         inline=True,
     )
-    await interaction.response.send_message(embed=embed)
+    embed.add_field(
+        name="📦 Desglose de paquetes",
+        value="\n".join(lineas_desglose) or "—",
+        inline=False,
+    )
+    embed.set_footer(text="Precios basados en los paquetes fijos del vendedor")
+
+    await interaction.followup.send(embed=embed)
 
 @tree.command(
     name="tickets",
@@ -1182,22 +1242,14 @@ async def cmd_send3(interaction: discord.Interaction):
         description="¡Únete a nuestras comunidades oficiales!\n\u200b",
         color=0xE74C3C,
     )
-    
-    # Agregar cada grupo
     grupos_texto = ""
     for grupo in GRUPOS_ROBLOX:
         grupos_texto += f"**[{grupo['nombre']}]({grupo['url']})**\n"
-    
-    embed.add_field(
-        name="📋 Grupos Disponibles",
-        value=grupos_texto,
-        inline=False
-    )
-    
+
+    embed.add_field(name="📋 Grupos Disponibles", value=grupos_texto, inline=False)
     embed.set_thumbnail(
         url="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Roblox_Logo_2022.svg/512px-Roblox_Logo_2022.svg.png"
     )
-    
     await interaction.channel.send(embed=embed)
     await interaction.response.send_message("✅ Grupos enviados.", ephemeral=True)
 
@@ -1208,22 +1260,21 @@ async def cmd_send3(interaction: discord.Interaction):
 )
 @app_commands.check(es_admin_o_owner)
 async def cmd_stats(interaction: discord.Interaction):
-    total_tickets = len(tickets_activos)
-    tickets_abiertos = sum(1 for t in tickets_activos.values() if t.get("estado") == "abierto")
+    total_tickets      = len(tickets_activos)
+    tickets_abiertos   = sum(1 for t in tickets_activos.values() if t.get("estado") == "abierto")
     tickets_pendientes = sum(1 for t in tickets_activos.values() if t.get("estado") == "pendiente")
     tickets_entregados = sum(1 for t in tickets_activos.values() if t.get("estado") == "entregado")
-    
-    total_robux = sum(t.get("robux", 0) for t in tickets_activos.values())
-    
+    total_robux        = sum(t.get("robux", 0) for t in tickets_activos.values())
+
     embed = discord.Embed(title="📊 Estadísticas del Bot", color=0x3498DB)
-    embed.add_field(name="Tickets Totales", value=str(total_tickets), inline=True)
-    embed.add_field(name="🟢 Abiertos", value=str(tickets_abiertos), inline=True)
-    embed.add_field(name="🟡 Pendientes", value=str(tickets_pendientes), inline=True)
-    embed.add_field(name="✅ Entregados", value=str(tickets_entregados), inline=True)
-    embed.add_field(name="💎 Robux Totales", value=f"{total_robux:,} R$", inline=True)
-    embed.add_field(name="🎫 Contador", value=str(ticket_counter), inline=True)
-    embed.add_field(name="🎭 Autoroles", value=str(len(autoroles_registrados)), inline=True)
-    
+    embed.add_field(name="Tickets Totales",  value=str(total_tickets),       inline=True)
+    embed.add_field(name="🟢 Abiertos",      value=str(tickets_abiertos),    inline=True)
+    embed.add_field(name="🟡 Pendientes",    value=str(tickets_pendientes),   inline=True)
+    embed.add_field(name="✅ Entregados",    value=str(tickets_entregados),   inline=True)
+    embed.add_field(name="💎 Robux Totales", value=f"{total_robux:,} R$",    inline=True)
+    embed.add_field(name="🎫 Contador",      value=str(ticket_counter),       inline=True)
+    embed.add_field(name="🎭 Autoroles",     value=str(len(autoroles_registrados)), inline=True)
+
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @tree.command(
@@ -1235,10 +1286,10 @@ async def cmd_stats(interaction: discord.Interaction):
 @app_commands.check(es_admin_o_owner)
 async def cmd_cleanup(interaction: discord.Interaction, dias: int = 7):
     await interaction.response.defer(ephemeral=True)
-    
+
     eliminados = 0
-    ahora = datetime.datetime.utcnow()
-    
+    ahora      = datetime.datetime.utcnow()
+
     for canal_id, datos in list(tickets_activos.items()):
         if datos.get("estado") == "cerrado":
             creado = datos.get("creado_en")
@@ -1247,7 +1298,7 @@ async def cmd_cleanup(interaction: discord.Interaction, dias: int = 7):
                     creado = datetime.datetime.fromisoformat(creado)
                 except:
                     creado = ahora
-            
+
             if (ahora - creado).days > dias:
                 canal = interaction.guild.get_channel(canal_id)
                 if canal:
@@ -1257,7 +1308,7 @@ async def cmd_cleanup(interaction: discord.Interaction, dias: int = 7):
                     except:
                         pass
                 tickets_activos.pop(canal_id, None)
-    
+
     guardar_datos()
     await interaction.followup.send(
         f"✅ Limpieza completada. {eliminados} tickets eliminados.",
@@ -1290,8 +1341,7 @@ async def on_ready():
         await obtener_tasas_live()
     except Exception as e:
         logger.warning(f"⚠️ No se pudieron cargar tasas live: {e}")
-    
-    # Iniciar backup automático
+
     bot.loop.create_task(backup_automatico())
 
 @bot.event
