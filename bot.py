@@ -1061,63 +1061,49 @@ async def cmd_calcular_precio(interaction: discord.Interaction, robux: int, mone
 
     info        = TASAS_CAMBIO[codigo]
     moneda_code = info["moneda"]
-    rates       = await obtener_tasas_live()
-    tasa_usada  = rates.get(moneda_code, info["tasa"]) if rates else info["tasa"]
-    fuente_tasa = (
-        "🌐 Tasa en tiempo real"
-        if (rates and moneda_code in rates)
-        else "📌 Tasa estática (fallback)"
-    )
+    # SIEMPRE usar tasa estática fija — nunca la tasa live
+    tasa_fija   = info["tasa"]
 
     total_usd, desglose = calcular_precio_paquetes(robux)
-    total_local         = round(total_usd * tasa_usada, 2)
+    total_local         = round(total_usd * tasa_fija, 2)
 
     # Formatear precio local según magnitud
-    if moneda_code == "EUR":
-        precio_local_str = f"{info['simbolo']}{total_local:,.2f} {moneda_code}"
-    elif tasa_usada >= 100:
-        precio_local_str = f"{info['simbolo']}{total_local:,.0f} {moneda_code}"
-    else:
-        precio_local_str = f"{info['simbolo']}{total_local:,.2f} {moneda_code}"
+    def fmt_local(valor: float) -> str:
+        if moneda_code == "EUR":
+            return f"{info['simbolo']}{valor:,.2f} {moneda_code}"
+        elif tasa_fija >= 100:
+            return f"{info['simbolo']}{int(valor):,} {moneda_code}"
+        else:
+            return f"{info['simbolo']}{valor:,.2f} {moneda_code}"
 
     # Construir desglose línea por línea
     lineas_desglose = []
     for veces, cantidad, precio_pkg in desglose:
         subtotal_usd   = round(veces * precio_pkg, 2)
-        subtotal_local = round(subtotal_usd * tasa_usada, 2)
+        subtotal_local = round(subtotal_usd * tasa_fija, 2)
 
-        if moneda_code == "EUR":
-            local_str = f"{info['simbolo']}{subtotal_local:,.2f}"
-        elif tasa_usada >= 100:
-            local_str = f"{info['simbolo']}{subtotal_local:,.0f}"
-        else:
-            local_str = f"{info['simbolo']}{subtotal_local:,.2f}"
+        local_str = fmt_local(subtotal_local).split(" ")[0]  # solo símbolo+número sin código
 
         if cantidad in PRECIOS_ROBUX:
             lineas_desglose.append(
-                f"`{veces}×` **{cantidad:,} R$** — ${subtotal_usd:.2f} USD / {local_str}"
+                f"`{veces}×` **{cantidad:,} R$** — ${subtotal_usd:,.2f} USD / {local_str}"
             )
         else:
             lineas_desglose.append(
-                f"`1×` **{cantidad:,} R$** *(residuo)* — ${subtotal_usd:.2f} USD / {local_str}"
+                f"`1×` **{cantidad:,} R$** *(residuo)* — ${subtotal_usd:,.2f} USD / {local_str}"
             )
 
     embed = discord.Embed(
         title="💰 Calculadora de Robux",
-        description=f"Precio para **{robux:,} R$** pagando en **{info['nombre']}**",
+        description=(
+            f"**{robux:,} R$** pagando en **{info['nombre']} ({moneda_code})**\n\u200b"
+        ),
         color=0xF39C12,
     )
-    embed.add_field(name="🎲 Robux solicitados", value=f"**{robux:,} R$**",      inline=True)
-    embed.add_field(name="🌍 Moneda",            value=f"**{moneda_code}**",      inline=True)
-    embed.add_field(name="💵 Total USD",         value=f"**${total_usd:,.2f}**",  inline=True)
-    embed.add_field(name="💰 Total local",       value=f"**{precio_local_str}**", inline=True)
+    embed.add_field(name="💵 Total USD",   value=f"**${total_usd:,.2f}**",       inline=True)
+    embed.add_field(name="💰 Total local", value=f"**{fmt_local(total_local)}**", inline=True)
     embed.add_field(
-        name="📈 Tasa usada",
-        value=f"1 USD = {tasa_usada:,.4f} {moneda_code}\n*{fuente_tasa}*",
-        inline=True,
-    )
-    embed.add_field(
-        name="📦 Desglose de paquetes",
+        name="📦 Desglose",
         value="\n".join(lineas_desglose) or "—",
         inline=False,
     )
