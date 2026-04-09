@@ -105,7 +105,7 @@ TASAS_CAMBIO = {
     "PY": {"nombre": "Paraguay",       "moneda": "PYG", "simbolo": "₲",   "tasa": 7300.0},
     "UY": {"nombre": "Uruguay",        "moneda": "UYU", "simbolo": "$",   "tasa": 38.50},
     "BR": {"nombre": "Brasil",         "moneda": "BRL", "simbolo": "R$",  "tasa": 5.00},
-    "ES": {"nombre": "España",         "moneda": "EUR", "simbolo": "€",   "tasa": 0.86},
+    "ES": {"nombre": "España",         "moneda": "EUR", "simbolo": "€",   "tasa": 0.92},
     "US": {"nombre": "Estados Unidos", "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
     "GT": {"nombre": "Guatemala",      "moneda": "GTQ", "simbolo": "Q",   "tasa": 7.80},
     "SV": {"nombre": "El Salvador",    "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
@@ -283,7 +283,8 @@ async def calcular_precio(robux: int, codigo_pais: str) -> Tuple[Optional[float]
         raise ValueError(f"País {codigo_pais} no soportado")
     
     usd   = precio_usd_aproximado(robux)
-    tasa  = info["tasa"]  # Siempre usar tasa fija del vendedor
+    rates = await obtener_tasas_live()
+    tasa  = rates.get(info["moneda"], info["tasa"]) if rates else info["tasa"]
     local = usd * tasa
     texto = f"{info['simbolo']}{local:,.2f} {info['moneda']}"
     return local, texto, usd
@@ -372,7 +373,7 @@ async def construir_embed_tabla(titulo: str, descripcion: str, color: int) -> di
     for codigo in ["MX", "AR", "CO", "ES"]:
         info_p = TASAS_CAMBIO[codigo]
         moneda = info_p["moneda"]
-        tasa = info_p["tasa"]  # Siempre usar tasa fija del vendedor
+        tasa = info_p["tasa"] if codigo in ("MX", "CO", "AR") else rates.get(moneda, info_p["tasa"]) if rates else info_p["tasa"]
         col = ""
         for r in cantidades:
             local = precio_usd_aproximado(r) * tasa
@@ -1179,6 +1180,7 @@ async def cmd_send3(interaction: discord.Interaction):
         color=0xE74C3C,
     )
     
+    # Agregar cada grupo
     grupos_texto = ""
     for grupo in GRUPOS_ROBLOX:
         grupos_texto += f"**[{grupo['nombre']}]({grupo['url']})**\n"
