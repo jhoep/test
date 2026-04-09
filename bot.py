@@ -105,7 +105,7 @@ TASAS_CAMBIO = {
     "PY": {"nombre": "Paraguay",       "moneda": "PYG", "simbolo": "₲",   "tasa": 7300.0},
     "UY": {"nombre": "Uruguay",        "moneda": "UYU", "simbolo": "$",   "tasa": 38.50},
     "BR": {"nombre": "Brasil",         "moneda": "BRL", "simbolo": "R$",  "tasa": 5.00},
-    "ES": {"nombre": "España",         "moneda": "EUR", "simbolo": "€",   "tasa": 0.86},
+    "ES": {"nombre": "España",         "moneda": "EUR", "simbolo": "€",   "tasa": 0.92},
     "US": {"nombre": "Estados Unidos", "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
     "GT": {"nombre": "Guatemala",      "moneda": "GTQ", "simbolo": "Q",   "tasa": 7.80},
     "SV": {"nombre": "El Salvador",    "moneda": "USD", "simbolo": "$",   "tasa": 1.0},
@@ -156,6 +156,7 @@ def cargar_datos():
             data = json.load(f)
             tickets_activos       = {}
             for k, v in data.get("tickets", {}).items():
+                # Convertir creado_en de string a datetime
                 if "creado_en" in v and isinstance(v["creado_en"], str):
                     try:
                         v["creado_en"] = datetime.datetime.fromisoformat(v["creado_en"])
@@ -189,17 +190,20 @@ def guardar_datos():
                 copia["creado_en"] = copia["creado_en"].isoformat()
             data["tickets"][str(k)] = copia
         
+        # Escribir a archivo temporal primero
         temp_file = DATA_FILE + ".tmp"
         with open(temp_file, "w") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
             f.flush()
             os.fsync(f.fileno())
         
+        # Reemplazar archivo original
         os.replace(temp_file, DATA_FILE)
         logger.debug("Datos guardados exitosamente")
         
     except Exception as e:
         logger.error(f"❌ Error crítico guardando datos: {e}")
+        # Intentar guardar en archivo de emergencia
         try:
             emergency_file = f"data_emergency_{int(_time.time())}.json"
             with open(emergency_file, "w") as f:
@@ -213,9 +217,9 @@ def guardar_datos():
 # ============================================================
 async def backup_automatico():
     """Crea backup del archivo de datos cada hora"""
-    await asyncio.sleep(60)
+    await asyncio.sleep(60)  # Esperar 1 minuto antes del primer backup
     while True:
-        await asyncio.sleep(3600)
+        await asyncio.sleep(3600)  # 1 hora
         try:
             if not os.path.exists(DATA_FILE):
                 continue
@@ -225,6 +229,7 @@ async def backup_automatico():
             shutil.copy2(DATA_FILE, backup_name)
             logger.info(f"✅ Backup creado: {backup_name}")
             
+            # Mantener solo los últimos 24 backups
             import glob
             backups = sorted(glob.glob("data_backup_*.json"))
             if len(backups) > 24:
@@ -357,12 +362,14 @@ async def construir_embed_tabla(titulo: str, descripcion: str, color: int) -> di
         color=color,
     )
 
+    # Columna USD
     col_usd = ""
     for r in cantidades:
         p = precio_usd_aproximado(r)
         col_usd += f"✅ `{r:>6,}` → **${p:.2f}**\n"
     embed.add_field(name="💵 USD", value=col_usd, inline=True)
 
+    # Columnas monedas locales (máximo 4 para no exceder límite)
     for codigo in ["MX", "AR", "CO", "ES"]:
         info_p = TASAS_CAMBIO[codigo]
         moneda = info_p["moneda"]
@@ -380,6 +387,7 @@ async def construir_embed_tabla(titulo: str, descripcion: str, color: int) -> di
     return embed
 
 async def log_accion(guild: discord.Guild, tipo: str, descripcion: str, color: int):
+    """Función centralizada para logs"""
     if not LOG_CHANNEL_ID:
         return
     
@@ -459,6 +467,7 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
             )
             return
 
+        # Validar usuario de Roblox
         usuario_roblox = self.usuario_roblox.value.strip()
         if not usuario_roblox.replace("_", "").isalnum():
             await interaction.response.send_message(
@@ -492,7 +501,7 @@ class FormularioRobux(discord.ui.Modal, title="🛒 Comprar Robux"):
         async with ticket_lock:
             ticket_counter += 1
             numero = ticket_counter
-            guardar_datos()
+            guardar_datos()  # Guardar inmediatamente
 
         nombre_canal = f"ticket-{numero:04d}-{interaction.user.name.lower()[:10]}"
 
@@ -898,6 +907,7 @@ class VistaAutorolSelect(discord.ui.View):
             await interaction.response.send_message("❌ No se encontro el rol. Puede que haya sido eliminado.", ephemeral=True)
             return
 
+        # Verificar jerarquía de roles
         if role >= interaction.guild.me.top_role:
             await interaction.response.send_message(
                 "❌ No puedo asignar ese rol porque está por encima del mío en la jerarquía.",
@@ -1170,6 +1180,7 @@ async def cmd_send3(interaction: discord.Interaction):
         color=0xE74C3C,
     )
     
+    # Agregar cada grupo
     grupos_texto = ""
     for grupo in GRUPOS_ROBLOX:
         grupos_texto += f"**[{grupo['nombre']}]({grupo['url']})**\n"
@@ -1277,6 +1288,7 @@ async def on_ready():
     except Exception as e:
         logger.warning(f"⚠️ No se pudieron cargar tasas live: {e}")
     
+    # Iniciar backup automático
     bot.loop.create_task(backup_automatico())
 
 @bot.event
